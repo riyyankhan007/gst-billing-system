@@ -5,7 +5,6 @@ import com.gstbilling.gst_billing.entity.Customer;
 import com.gstbilling.gst_billing.entity.Invoice;
 import com.gstbilling.gst_billing.entity.InvoiceItem;
 import com.gstbilling.gst_billing.entity.Product;
-import com.gstbilling.gst_billing.repository.BusinessRepository;
 import com.gstbilling.gst_billing.repository.CustomerRepository;
 import com.gstbilling.gst_billing.repository.InvoiceRepository;
 import com.gstbilling.gst_billing.repository.ProductRepository;
@@ -24,18 +23,18 @@ public class InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final ProductRepository productRepository;
     private final CustomerRepository customerRepository;
-    private final BusinessRepository businessRepository;
+    private final CurrentUserService currentUserService;
 
     public InvoiceService(
             InvoiceRepository invoiceRepository,
             ProductRepository productRepository,
             CustomerRepository customerRepository,
-            BusinessRepository businessRepository
+            CurrentUserService currentUserService
     ) {
         this.invoiceRepository = invoiceRepository;
         this.productRepository = productRepository;
         this.customerRepository = customerRepository;
-        this.businessRepository = businessRepository;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional
@@ -46,19 +45,14 @@ public class InvoiceService {
                 "TEMP-" + System.currentTimeMillis()
         );
 
-        // Fetch business
-        Business business = businessRepository.findById(invoice.getBusinessId())
-                .orElseThrow(() ->
-                        new RuntimeException(
-                                "Business not found: " + invoice.getBusinessId()
-                        )
-                );
+        // The business is always derived from the JWT-authenticated user.
+        Business business = currentUserService.getCurrentUser().getBusiness();
 
         // Attach business to invoice
         invoice.setBusiness(business);
 
         // Fetch customer
-        Customer customer = customerRepository.findById(invoice.getCustomerId())
+        Customer customer = customerRepository.findByIdAndBusinessId(invoice.getCustomerId(), business.getId())
                 .orElseThrow(() ->
                         new RuntimeException(
                                 "Customer not found: " + invoice.getCustomerId()
@@ -94,7 +88,7 @@ public class InvoiceService {
         for (InvoiceItem item : invoice.getItems()) {
 
             // Fetch product from database
-            Product product = productRepository.findById(item.getProductId())
+            Product product = productRepository.findByIdAndBusinessId(item.getProductId(), business.getId())
                     .orElseThrow(() ->
                             new RuntimeException(
                                     "Product not found: " + item.getProductId()
@@ -184,8 +178,8 @@ public class InvoiceService {
 
         // Generate final invoice number
         String invoiceNumber = String.format(
-                "INV-%03d",
-                savedInvoice.getId()
+                "%s-%03d",
+                business.getInvoicePrefix() == null || business.getInvoicePrefix().isBlank() ? "INV" : business.getInvoicePrefix(), savedInvoice.getId()
         );
 
         savedInvoice.setInvoiceNumber(invoiceNumber);
@@ -195,20 +189,20 @@ public class InvoiceService {
     }
 
     public List<Invoice> getAllInvoices() {
-        return invoiceRepository.findAll();
+        return invoiceRepository.findByBusinessId(currentUserService.getCurrentUser().getBusiness().getId());
     }
 
     public Invoice getInvoiceById(Long id) {
-        return invoiceRepository.findById(id)
+        return invoiceRepository.findByIdAndBusinessId(id, currentUserService.getCurrentUser().getBusiness().getId())
                 .orElseThrow(() ->
-                        new RuntimeException("Invoice not found")
+                        new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Invoice is not available to this business")
                 );
     }
     public Invoice markAsPaid(Long id) {
         Invoice invoice = getInvoiceById(id);
 
-        if ("CANCELLED".equals(invoice.getStatus())) {
-            throw new RuntimeException("Cancelled invoice cannot be paid");
+        if (!"DRAFT".equals(invoice.getStatus())) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Only draft invoices can be marked as paid");
         }
 
         invoice.setStatus("PAID");
@@ -218,8 +212,8 @@ public class InvoiceService {
     public Invoice cancelInvoice(Long id) {
         Invoice invoice = getInvoiceById(id);
 
-        if ("PAID".equals(invoice.getStatus())) {
-            throw new RuntimeException("Paid invoice cannot be cancelled");
+        if (!"DRAFT".equals(invoice.getStatus())) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Only draft invoices can be cancelled");
         }
 
         invoice.setStatus("CANCELLED");

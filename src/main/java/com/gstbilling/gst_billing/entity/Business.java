@@ -27,6 +27,11 @@ public class Business {
 
     private String email;
 
+    private String website;
+
+    @Column(name = "logo_path")
+    private String logo;
+
     @Column(name = "invoice_prefix")
     private String invoicePrefix;
 
@@ -95,6 +100,11 @@ public class Business {
     public void setEmail(String email) {
         this.email = email;
     }
+
+    public String getWebsite() { return website; }
+    public void setWebsite(String website) { this.website = website; }
+    public String getLogo() { return logo; }
+    public void setLogo(String logo) { this.logo = logo; }
 
     public String getInvoicePrefix() {
         return invoicePrefix;

@@ -3,6 +3,7 @@ import {
     getInvoiceById,
     markInvoiceAsPaid,
     cancelInvoice
+    ,downloadInvoicePdf
 } from "../services/api";
 
 function InvoiceDetails({ invoiceId, onBack }) {
@@ -33,11 +34,9 @@ function InvoiceDetails({ invoiceId, onBack }) {
         })}`;
     }
 
-    function downloadPdf() {
-        window.open(
-            `http://localhost:8081/api/invoices/${invoice.id}/pdf`,
-            "_blank"
-        );
+    async function downloadPdf() {
+        const blob = await downloadInvoicePdf(invoice.id);
+        const url = URL.createObjectURL(blob); window.open(url, "_blank");
     }
 
     async function handlePaid() {
@@ -86,6 +85,9 @@ function InvoiceDetails({ invoiceId, onBack }) {
                         <p>{invoice.business?.address}</p>
                         <p>GSTIN: {invoice.business?.gstin}</p>
                         <p>State: {invoice.business?.state}</p>
+                        <p>Phone: {invoice.business?.phone}</p>
+                        <p>Email: {invoice.business?.email}</p>
+                        <p>{invoice.business?.website}</p>
                     </div>
 
                     <div style={styles.invoiceInfo}>
@@ -116,6 +118,8 @@ function InvoiceDetails({ invoiceId, onBack }) {
                     <p>{invoice.customer?.address}</p>
                     <p>GSTIN: {invoice.customer?.gstin}</p>
                     <p>State: {invoice.customer?.state}</p>
+                    <p>Phone: {invoice.customer?.phone}</p>
+                    <p>Email: {invoice.customer?.email}</p>
                 </div>
 
                 <hr />

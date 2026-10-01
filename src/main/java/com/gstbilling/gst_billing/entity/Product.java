@@ -23,6 +23,11 @@ public class Product {
     @Column(name = "gst_rate", nullable = false)
     private BigDecimal gstRate;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "business_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private Business business;
+
     public Long getId() {
         return id;
     }
@@ -62,4 +67,6 @@ public class Product {
     public void setGstRate(BigDecimal gstRate) {
         this.gstRate = gstRate;
     }
+    public Business getBusiness() { return business; }
+    public void setBusiness(Business business) { this.business = business; }
 }

@@ -1,0 +1,7 @@
+import { useState } from "react";
+import { login, register } from "../services/api";
+export default function Login({ onAuthenticated }) {
+ const [registering,setRegistering]=useState(false),[form,setForm]=useState({name:"",businessName:"",email:"",password:""}),[error,setError]=useState(""); const change=e=>setForm({...form,[e.target.name]:e.target.value});
+ const submit=async e=>{e.preventDefault();try{const result=registering?await register(form):await login(form);localStorage.setItem("gstToken",result.token);onAuthenticated()}catch(e){setError("Login failed. Check your details and try again.")}};
+ return <main style={{maxWidth:420,margin:"80px auto",fontFamily:"Arial"}}><h1>GST Billing</h1><h2>{registering?"Create account":"Login"}</h2><form onSubmit={submit}>{registering&&<><input name="name" placeholder="Your name" value={form.name} onChange={change} required/><input name="businessName" placeholder="Business name" value={form.businessName} onChange={change} required/></>}<input type="email" name="email" placeholder="Email" value={form.email} onChange={change} required/><input type="password" name="password" placeholder="Password" minLength="6" value={form.password} onChange={change} required/><button type="submit">{registering?"Register":"Login"}</button></form>{error&&<p style={{color:"red"}}>{error}</p>}<button onClick={()=>{setRegistering(!registering);setError("")}}>{registering?"Already have an account? Login":"New here? Register"}</button></main>;
+}

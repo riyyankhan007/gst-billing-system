@@ -10,12 +10,15 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 @Service
 public class InvoicePdfService {
@@ -47,6 +50,12 @@ public class InvoicePdfService {
 
                 Business business = invoice.getBusiness();
 
+                Path logoPath = business == null || business.getLogo() == null ? null : Path.of("uploads", Path.of(business.getLogo()).getFileName().toString());
+                if (logoPath != null && Files.exists(logoPath)) {
+                    PDImageXObject logo = PDImageXObject.createFromFileByContent(logoPath.toFile(), document);
+                    content.drawImage(logo, 460, 770, 70, 35);
+                }
+
                 write(content,
                         business != null ? business.getName() : "",
                         16, left, 765);
@@ -64,6 +73,9 @@ public class InvoicePdfService {
                         "State: " +
                                 (business != null ? business.getState() : ""),
                         10, left, 718);
+                write(content, "Phone: " + (business != null ? business.getPhone() : ""), 10, left, 703);
+                write(content, "Email: " + (business != null ? business.getEmail() : ""), 10, left, 688);
+                write(content, "Website: " + (business != null ? business.getWebsite() : ""), 10, left, 673);
 
                 write(content,
                         "Invoice No: " + invoice.getInvoiceNumber(),
@@ -77,33 +89,35 @@ public class InvoicePdfService {
                         "Status: " + invoice.getStatus(),
                         10, 400, 733);
 
-                line(content, left, 700, right, 700);
+                line(content, left, 655, right, 655);
 
                 // Customer
                 Customer customer = invoice.getCustomer();
 
-                write(content, "BILL TO", 12, left, 675);
+                write(content, "BILL TO", 12, left, 635);
 
                 write(content,
                         customer != null ? customer.getName() : "",
-                        11, left, 657);
+                        11, left, 617);
 
                 write(content,
                         customer != null ? customer.getAddress() : "",
-                        10, left, 642);
+                        10, left, 602);
 
                 write(content,
                         "GSTIN: " +
                                 (customer != null ? customer.getGstin() : ""),
-                        10, left, 627);
+                        10, left, 587);
 
                 write(content,
                         "State: " +
                                 (customer != null ? customer.getState() : ""),
-                        10, left, 612);
+                        10, left, 572);
+                write(content, "Phone: " + (customer != null ? customer.getPhone() : ""), 10, left, 557);
+                write(content, "Email: " + (customer != null ? customer.getEmail() : ""), 10, left, 542);
 
                 // Table
-                float y = 570;
+                float y = 505;
 
                 line(content, left, y + 10, right, y + 10);
 

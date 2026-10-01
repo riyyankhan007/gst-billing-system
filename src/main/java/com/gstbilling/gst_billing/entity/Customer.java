@@ -25,6 +25,13 @@ public class Customer {
 
     private String phone;
 
+    private String email;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "business_id")
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    private Business business;
+
     public Long getId() {
         return id;
     }
@@ -80,4 +87,8 @@ public class Customer {
     public void setPhone(String phone) {
         this.phone = phone;
     }
+    public String getEmail() { return email; }
+    public void setEmail(String email) { this.email = email; }
+    public Business getBusiness() { return business; }
+    public void setBusiness(Business business) { this.business = business; }
 }
