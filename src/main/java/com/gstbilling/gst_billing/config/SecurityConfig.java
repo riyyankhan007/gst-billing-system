@@ -28,7 +28,10 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("https://gst-billing-system-five.vercel.app"));
+        config.setAllowedOrigins(List.of(
+                "https://gst-billing-system-five.vercel.app",
+                "https://gst-billing-system-git-main-riyyan.vercel.app"
+        ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(false);
