@@ -231,372 +231,144 @@ function CreateInvoice({ onBack }) {
     }
 
     return (
-        <div style={styles.container}>
+        <div className="invoice-page management-page">
+            <button className="text-button" onClick={onBack}>← Back</button>
 
-            <button
-                onClick={onBack}
-                style={styles.backButton}
-            >
-                ← Back
-            </button>
+            <div className="page-intro">
+                <div className="eyebrow">INVOICES</div>
+                <h1>Create an invoice.</h1>
+                <p>Build your invoice, add products and review the total.</p>
+            </div>
 
-            <h1>Create Invoice</h1>
+            <div className="management-layout">
+                <section className="form-panel">
+                    <div className="form-heading">
+                        <div className="eyebrow">DETAILS</div>
+                        <h2>Invoice details</h2>
+                    </div>
 
-            {/* Business */}
+                    <div className="form-field">
+                        <label>Business</label>
+                        <select value={businessId} onChange={e => setBusinessId(e.target.value)}>
+                            <option value="">Select Business</option>
+                            {businesses.map(business => (
+                                <option key={business.id} value={business.id}>{business.name}</option>
+                            ))}
+                        </select>
+                    </div>
 
-            <label>Business</label>
+                    <div className="form-field">
+                        <label>Customer</label>
+                        <select value={customerId} onChange={e => setCustomerId(e.target.value)}>
+                            <option value="">Select Customer</option>
+                            {customers.map(customer => (
+                                <option key={customer.id} value={customer.id}>{customer.name}</option>
+                            ))}
+                        </select>
+                    </div>
 
-            <select
-                value={businessId}
-                onChange={(e) =>
-                    setBusinessId(e.target.value)
-                }
-                style={styles.input}
-            >
+                    <div className="form-heading invoice-items-heading">
+                        <div className="eyebrow">ITEMS</div>
+                        <h2>Invoice items</h2>
+                    </div>
 
-                <option value="">
-                    Select Business
-                </option>
-
-                {businesses.map((business) => (
-
-                    <option
-                        key={business.id}
-                        value={business.id}
-                    >
-                        {business.name}
-                    </option>
-
-                ))}
-
-            </select>
-
-            {/* Customer */}
-
-            <label>Customer</label>
-
-            <select
-                value={customerId}
-                onChange={(e) =>
-                    setCustomerId(e.target.value)
-                }
-                style={styles.input}
-            >
-
-                <option value="">
-                    Select Customer
-                </option>
-
-                {customers.map((customer) => (
-
-                    <option
-                        key={customer.id}
-                        value={customer.id}
-                    >
-                        {customer.name}
-                    </option>
-
-                ))}
-
-            </select>
-
-            <h2>Invoice Items</h2>
-
-            {/* Items */}
-
-            {items.map((item, index) => (
-
-                <div
-                    key={index}
-                    style={styles.itemRow}
-                >
-
-                    <select
-                        value={item.productId}
-                        onChange={(e) =>
-                            updateItem(
-                                index,
-                                "productId",
-                                e.target.value
-                            )
-                        }
-                        style={styles.productSelect}
-                    >
-
-                        <option value="">
-                            Select Product
-                        </option>
-
-                        {products.map((product) => (
-
-                            <option
-                                key={product.id}
-                                value={product.id}
+                    {items.map((item, index) => (
+                        <div className="invoice-item" key={index}>
+                            <select
+                                value={item.productId}
+                                onChange={e => updateItem(index, "productId", e.target.value)}
                             >
-                                {product.name} - ₹
-                                {product.price}
-                            </option>
+                                <option value="">Select Product</option>
+                                {products.map(product => (
+                                    <option key={product.id} value={product.id}>
+                                        {product.name} — ₹{product.price}
+                                    </option>
+                                ))}
+                            </select>
 
-                        ))}
+                            <input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={e => updateItem(index, "quantity", e.target.value)}
+                            />
 
-                    </select>
+                            {items.length > 1 && (
+                                <button type="button" onClick={() => removeItem(index)}>×</button>
+                            )}
+                        </div>
+                    ))}
 
-                    <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) =>
-                            updateItem(
-                                index,
-                                "quantity",
-                                e.target.value
-                            )
-                        }
-                        style={styles.quantityInput}
-                    />
+                    <button type="button" className="add-item-button" onClick={addItem}>
+                        + Add product
+                    </button>
 
-                    {items.length > 1 && (
-
-                        <button
-                            onClick={() =>
-                                removeItem(index)
-                            }
-                            style={styles.removeButton}
-                        >
-                            Remove
+                    <div className="invoice-actions">
+                        <button className="primary-button form-submit" onClick={handleCreateInvoice}>
+                            Create invoice
                         </button>
+                    </div>
 
-                    )}
+                    {message && <p className="form-error">{message}</p>}
+                </section>
 
-                </div>
+                <section className="data-panel">
+                    <div className="data-panel-header">
+                        <div className="eyebrow">SUMMARY</div>
+                        <h2>Invoice preview</h2>
+                    </div>
 
-            ))}
+                    <div className="data-list">
+                        {items.map((item, index) => {
+                            const product = products.find(p => p.id === Number(item.productId));
+                            if (!product) return null;
 
-            <button
-                onClick={addItem}
-                style={styles.secondaryButton}
-            >
-                + Add Product
-            </button>
+                            const amount = product.price * Number(item.quantity);
 
-            {/* Invoice Summary */}
+                            return (
+                                <div className="data-row" key={index}>
+                                    <div>
+                                        <strong>{product.name}</strong>
+                                        <span>{item.quantity} × {formatCurrency(product.price)} · GST {product.gstRate}%</span>
+                                    </div>
+                                    <div className="data-value">{formatCurrency(amount)}</div>
+                                </div>
+                            );
+                        })}
 
-            {summary.taxableAmount > 0 && (
-
-                <div style={styles.summary}>
-
-                    <h2>Invoice Summary</h2>
-
-                    {items.map((item, index) => {
-
-                        const product = products.find(
-                            (product) =>
-                                product.id ===
-                                Number(item.productId)
-                        );
-
-                        if (!product) {
-                            return null;
-                        }
-
-                        const quantity =
-                            Number(item.quantity);
-
-                        const amount =
-                            product.price * quantity;
-
-                        return (
-                            <div
-                                key={index}
-                                style={styles.summaryRow}
-                            >
-
-                                <span>
-                                    {product.name}
-                                    {" "}
-                                    ({quantity} ×{" "}
-                                    {formatCurrency(
-                                        product.price
-                                    )})
-                                </span>
-
-                                <span>
-                                    {formatCurrency(amount)}
-                                </span>
-
+                        {summary.taxableAmount > 0 && (
+                            <div className="invoice-summary">
+                                <div className="invoice-summary-inner">
+                                    <div className="invoice-summary-row">
+                                        <span>Taxable amount</span>
+                                        <span>{formatCurrency(summary.taxableAmount)}</span>
+                                    </div>
+                                    <div className="invoice-summary-row">
+                                        <span>CGST</span>
+                                        <span>{formatCurrency(summary.cgst)}</span>
+                                    </div>
+                                    <div className="invoice-summary-row">
+                                        <span>SGST</span>
+                                        <span>{formatCurrency(summary.sgst)}</span>
+                                    </div>
+                                    <div className="invoice-summary-row">
+                                        <span>IGST</span>
+                                        <span>{formatCurrency(summary.igst)}</span>
+                                    </div>
+                                    <div className="invoice-summary-total">
+                                        <div className="invoice-summary-row">
+                                            <strong>Grand total</strong>
+                                            <strong>{formatCurrency(summary.grandTotal)}</strong>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        );
-
-                    })}
-
-                    <hr />
-
-                    <div style={styles.summaryRow}>
-                        <strong>
-                            Taxable Amount
-                        </strong>
-
-                        <strong>
-                            {formatCurrency(
-                                summary.taxableAmount
-                            )}
-                        </strong>
+                        )}
                     </div>
-
-                    <div style={styles.summaryRow}>
-                        <span>CGST</span>
-
-                        <span>
-                            {formatCurrency(
-                                summary.cgst
-                            )}
-                        </span>
-                    </div>
-
-                    <div style={styles.summaryRow}>
-                        <span>SGST</span>
-
-                        <span>
-                            {formatCurrency(
-                                summary.sgst
-                            )}
-                        </span>
-                    </div>
-
-                    <div style={styles.summaryRow}>
-                        <span>IGST</span>
-
-                        <span>
-                            {formatCurrency(
-                                summary.igst
-                            )}
-                        </span>
-                    </div>
-
-                    <hr />
-
-                    <div style={styles.grandTotal}>
-                        <strong>
-                            Grand Total
-                        </strong>
-
-                        <strong>
-                            {formatCurrency(
-                                summary.grandTotal
-                            )}
-                        </strong>
-                    </div>
-
-                </div>
-
-            )}
-
-            {/* Create Invoice */}
-
-            <button
-                onClick={handleCreateInvoice}
-                style={styles.createButton}
-            >
-                Create Invoice
-            </button>
-
-            {message && (
-
-                <p style={styles.message}>
-                    {message}
-                </p>
-
-            )}
-
+                </section>
+            </div>
         </div>
     );
 }
-
-const styles = {
-
-    container: {
-        padding: "40px",
-        maxWidth: "900px",
-        margin: "0 auto",
-        fontFamily: "Arial"
-    },
-
-    backButton: {
-        padding: "8px 14px",
-        cursor: "pointer",
-        marginBottom: "20px"
-    },
-
-    input: {
-        width: "100%",
-        padding: "12px",
-        fontSize: "16px",
-        marginBottom: "20px"
-    },
-
-    itemRow: {
-        display: "flex",
-        gap: "10px",
-        alignItems: "center",
-        marginBottom: "10px"
-    },
-
-    productSelect: {
-        flex: 1,
-        padding: "12px",
-        fontSize: "16px"
-    },
-
-    quantityInput: {
-        width: "100px",
-        padding: "12px",
-        fontSize: "16px"
-    },
-
-    secondaryButton: {
-        padding: "10px 16px",
-        cursor: "pointer",
-        marginTop: "10px"
-    },
-
-    removeButton: {
-        padding: "10px",
-        cursor: "pointer"
-    },
-
-    summary: {
-        marginTop: "30px",
-        padding: "20px",
-        border: "1px solid #ddd",
-        borderRadius: "8px"
-    },
-
-    summaryRow: {
-        display: "flex",
-        justifyContent: "space-between",
-        padding: "8px 0",
-        fontSize: "16px"
-    },
-
-    grandTotal: {
-        display: "flex",
-        justifyContent: "space-between",
-        padding: "12px 0",
-        fontSize: "20px"
-    },
-
-    createButton: {
-        width: "100%",
-        padding: "14px 20px",
-        fontSize: "16px",
-        cursor: "pointer",
-        marginTop: "25px"
-    },
-
-    message: {
-        fontSize: "16px",
-        marginTop: "15px"
-    }
-};
 
 export default CreateInvoice;

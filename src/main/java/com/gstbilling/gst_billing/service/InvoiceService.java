@@ -189,11 +189,11 @@ public class InvoiceService {
     }
 
     public List<Invoice> getAllInvoices() {
-        return invoiceRepository.findByBusinessId(currentUserService.getCurrentUser().getBusiness().getId());
+        return invoiceRepository.findByBusiness_Id(currentUserService.getCurrentUser().getBusiness().getId());
     }
 
     public Invoice getInvoiceById(Long id) {
-        return invoiceRepository.findByIdAndBusinessId(id, currentUserService.getCurrentUser().getBusiness().getId())
+        return invoiceRepository.findByIdAndBusiness_Id(id, currentUserService.getCurrentUser().getBusiness().getId())
                 .orElseThrow(() ->
                         new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN, "Invoice is not available to this business")
                 );
