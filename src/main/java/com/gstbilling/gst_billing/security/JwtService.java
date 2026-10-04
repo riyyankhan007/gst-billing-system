@@ -16,7 +16,21 @@ public class JwtService {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)); this.expirationMs = expirationMs;
     }
     public String generateToken(String email, Long userId) {
-        return Jwts.builder().subject(email).claim("userId", userId).issuedAt(new Date()).expiration(new Date(System.currentTimeMillis() + expirationMs)).signWith(key).compact();
+        return generateToken(email, userId, "ADMIN");
+    }
+    public String generateToken(String email, Long userId, String role) {
+        return Jwts.builder()
+                .subject(email)
+                .claim("userId", userId)
+                .claim("role", role != null ? role : "ADMIN")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + expirationMs))
+                .signWith(key)
+                .compact();
     }
     public String extractEmail(String token) { return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().getSubject(); }
+    public String extractRole(String token) {
+        Object role = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().get("role");
+        return role != null ? role.toString() : "ADMIN";
+    }
 }

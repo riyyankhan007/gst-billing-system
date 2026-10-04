@@ -26,4 +26,7 @@ public class BusinessController {
     }
     @PostMapping("/logo")
     public Business uploadLogo(@RequestParam("file") MultipartFile file) { return businessService.saveLogo(file); }
+
+    @PostMapping("/signature")
+    public Business uploadSignature(@RequestParam("file") MultipartFile file) { return businessService.saveSignature(file); }
 }

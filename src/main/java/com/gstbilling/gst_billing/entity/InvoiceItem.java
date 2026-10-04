@@ -18,9 +18,7 @@ public class InvoiceItem {
     @JsonBackReference
     private Invoice invoice;
 
-    // Used when creating an invoice.
-    // This is NOT stored in the database.
-    @Transient
+    @Column(name = "product_id")
     private Long productId;
 
     @Column(name = "product_name", nullable = false)
@@ -32,8 +30,17 @@ public class InvoiceItem {
     @Column(nullable = false)
     private BigDecimal quantity;
 
+    @Column(name = "unit")
+    private String unit;
+
     @Column(name = "unit_price", nullable = false)
     private BigDecimal unitPrice;
+
+    @Column(name = "discount")
+    private BigDecimal discount = BigDecimal.ZERO;
+
+    @Column(name = "tax_inclusive")
+    private Boolean taxInclusive = false;
 
     @Column(name = "gst_rate", nullable = false)
     private BigDecimal gstRate;
@@ -135,5 +142,29 @@ public class InvoiceItem {
 
     public void setTotalAmount(BigDecimal totalAmount) {
         this.totalAmount = totalAmount;
+    }
+
+    public BigDecimal getDiscount() {
+        return discount;
+    }
+
+    public void setDiscount(BigDecimal discount) {
+        this.discount = discount;
+    }
+
+    public String getUnit() {
+        return unit;
+    }
+
+    public void setUnit(String unit) {
+        this.unit = unit;
+    }
+
+    public Boolean getTaxInclusive() {
+        return taxInclusive;
+    }
+
+    public void setTaxInclusive(Boolean taxInclusive) {
+        this.taxInclusive = taxInclusive;
     }
 }

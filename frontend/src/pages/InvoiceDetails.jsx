@@ -1,348 +1,706 @@
 import { useEffect, useState } from "react";
 import {
     getInvoiceById,
-    markInvoiceAsPaid,
-    cancelInvoice
-    ,downloadInvoicePdf
+    issueInvoice,
+    markInvoiceAsSent,
+    cancelInvoice,
+    downloadInvoicePdf,
+    getInvoiceReminder,
+    sendInvoiceReminderEmail,
+    recordPayment
 } from "../services/api";
 
-function InvoiceDetails({ invoiceId, onBack }) {
+export default function InvoiceDetails({ invoiceId, onBack }) {
     const [invoice, setInvoice] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [actionLoading, setActionLoading] = useState(false);
+
+    // Reminder modal state
+    const [reminderModalOpen, setReminderModalOpen] = useState(false);
+    const [reminderData, setReminderData] = useState(null);
+    const [reminderEmailSending, setReminderEmailSending] = useState(false);
+    const [reminderEmailStatus, setReminderEmailStatus] = useState({ text: "", type: "" });
+    const [customNote, setCustomNote] = useState("");
+    const [copied, setCopied] = useState(false);
+
+    // Quick Payment modal state
+    const [payModalOpen, setPayModalOpen] = useState(false);
+    const [payAmount, setPayAmount] = useState("");
+    const [payMethod, setPayMethod] = useState("UPI");
+    const [payRef, setPayRef] = useState("");
 
     useEffect(() => {
-        async function loadInvoice() {
-            try {
-                const data = await getInvoiceById(invoiceId);
-                setInvoice(data);
-            } catch (error) {
-                console.error(error);
-                setError("Failed to load invoice");
-            } finally {
-                setLoading(false);
-            }
-        }
-
         loadInvoice();
     }, [invoiceId]);
 
+    async function loadInvoice() {
+        try {
+            setLoading(true);
+            const data = await getInvoiceById(invoiceId);
+            setInvoice(data);
+            setError("");
+        } catch (err) {
+            setError(err.message || "Failed to load invoice");
+        } finally {
+            setLoading(false);
+        }
+    }
+
     function formatCurrency(amount) {
-        return `₹${Number(amount).toLocaleString("en-IN", {
+        return `₹${Number(amount || 0).toLocaleString("en-IN", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2
         })}`;
     }
 
-    async function downloadPdf() {
-        const blob = await downloadInvoicePdf(invoice.id);
-        const url = URL.createObjectURL(blob); window.open(url, "_blank");
+    async function handleDownloadPdf() {
+        try {
+            const blob = await downloadInvoicePdf(invoice.id);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Invoice-${invoice.invoiceNumber || invoice.id}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            alert("Error downloading PDF: " + err.message);
+        }
     }
 
-    async function handlePaid() {
+    async function handleIssue() {
+        if (!window.confirm("Issue this invoice? This will lock the invoice number and reduce product inventory.")) return;
         try {
-            const updated = await markInvoiceAsPaid(invoice.id);
+            setActionLoading(true);
+            const updated = await issueInvoice(invoice.id);
             setInvoice(updated);
-        } catch (error) {
-            alert(error.message);
+        } catch (err) {
+            alert(err.message || "Could not issue invoice");
+        } finally {
+            setActionLoading(false);
+        }
+    }
+
+    async function handleMarkSent() {
+        try {
+            setActionLoading(true);
+            const updated = await markInvoiceAsSent(invoice.id);
+            setInvoice(updated);
+        } catch (err) {
+            alert(err.message || "Could not mark as sent");
+        } finally {
+            setActionLoading(false);
+        }
+    }
+
+    async function handleRecordPayment(e) {
+        e.preventDefault();
+        const amt = parseFloat(payAmount);
+        if (!amt || amt <= 0) {
+            alert("Please enter a valid positive payment amount");
+            return;
+        }
+        const bal = Number(invoice.balanceAmount != null ? invoice.balanceAmount : invoice.grandTotal);
+        if (amt > bal) {
+            alert(`Payment amount (${formatCurrency(amt)}) cannot exceed balance due (${formatCurrency(bal)})`);
+            return;
+        }
+        try {
+            setActionLoading(true);
+            await recordPayment({
+                invoiceId: invoice.id,
+                amount: amt,
+                paymentMode: payMethod,
+                referenceNumber: payRef,
+                paymentDate: new Date().toISOString().split("T")[0]
+            });
+            setPayModalOpen(false);
+            setPayAmount("");
+            setPayRef("");
+            await loadInvoice();
+        } catch (err) {
+            alert(err.message || "Failed to record payment");
+        } finally {
+            setActionLoading(false);
         }
     }
 
     async function handleCancel() {
+        if (!window.confirm("Are you sure you want to CANCEL this invoice? This will reverse any stock adjustments.")) return;
         try {
+            setActionLoading(true);
             const updated = await cancelInvoice(invoice.id);
             setInvoice(updated);
-        } catch (error) {
-            alert(error.message);
+        } catch (err) {
+            alert(err.message || "Could not cancel invoice");
+        } finally {
+            setActionLoading(false);
         }
     }
 
+    // Open reminder modal and fetch preformatted details
+    async function handleOpenReminder() {
+        setReminderModalOpen(true);
+        setReminderEmailStatus({ text: "", type: "" });
+        setCopied(false);
+
+        try {
+            const data = await getInvoiceReminder(invoice.id);
+            setReminderData(data);
+        } catch {
+            // Fallback client-side reminder details if endpoint fails
+            const customerName = invoice.customer?.name || "Customer";
+            const phone = invoice.customer?.phone || "";
+            const email = invoice.customer?.email || "";
+            const cleanPhone = phone.replace(/[^0-9]/g, "");
+            const formattedPhone = cleanPhone.length === 10 ? "91" + cleanPhone : cleanPhone;
+            const amount = formatCurrency(invoice.balanceAmount != null ? invoice.balanceAmount : invoice.grandTotal);
+            const text = `*Payment Reminder from ${invoice.business?.name || "Our Business"}*\n\nHello ${customerName},\nThis is a friendly reminder for Invoice *#${invoice.invoiceNumber}*:\n📅 Date: ${invoice.invoiceDate}\n💰 Balance Due: *${amount}*\n📊 Status: ${invoice.status}\n\nPlease clear the payment at your earliest convenience.\nThank you!`;
+            const whatsappUrl = formattedPhone
+                ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(text)}`
+                : `https://wa.me/?text=${encodeURIComponent(text)}`;
+
+            setReminderData({
+                customerName,
+                customerPhone: phone,
+                customerEmail: email,
+                invoiceNumber: invoice.invoiceNumber,
+                amount,
+                messageText: text,
+                whatsappUrl,
+                status: invoice.status
+            });
+        }
+    }
+
+    async function handleSendEmailReminder() {
+        if (!invoice.customer?.email) {
+            setReminderEmailStatus({
+                text: "Customer does not have an email address configured. Please use WhatsApp.",
+                type: "error"
+            });
+            return;
+        }
+
+        try {
+            setReminderEmailSending(true);
+            setReminderEmailStatus({ text: "", type: "" });
+
+            await sendInvoiceReminderEmail(invoice.id, customNote);
+            setReminderEmailStatus({
+                text: `Payment reminder email sent successfully to ${invoice.customer.email}!`,
+                type: "success"
+            });
+        } catch (err) {
+            setReminderEmailStatus({
+                text: err.message || "Failed to send email reminder",
+                type: "error"
+            });
+        } finally {
+            setReminderEmailSending(false);
+        }
+    }
+
+    function handleCopyMessage() {
+        if (!reminderData?.messageText) return;
+        navigator.clipboard.writeText(reminderData.messageText);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    }
+
     if (loading) {
-        return <p style={styles.message}>Loading invoice...</p>;
+        return (
+            <div className="empty-state">
+                <p>Loading invoice details...</p>
+            </div>
+        );
     }
 
-    if (error) {
-        return <p style={styles.error}>{error}</p>;
+    if (error || !invoice) {
+        return (
+            <div className="empty-state">
+                <p style={{ color: "var(--danger)" }}>{error || "Invoice not found"}</p>
+                <button type="button" className="secondary-button" onClick={onBack} style={{ marginTop: "16px" }}>
+                    ← Back to Invoices
+                </button>
+            </div>
+        );
     }
 
-    if (!invoice) {
-        return <p style={styles.error}>Invoice not found</p>;
-    }
+    const business = invoice.business || {};
+    const customer = invoice.customer || {};
+    const balance = Number(invoice.balanceAmount != null ? invoice.balanceAmount : invoice.grandTotal);
+    const paid = Number(invoice.paidAmount || 0);
 
     return (
-        <div style={styles.container}>
+        <div className="invoice-view-container">
+            {/* Header Actions */}
+            <div className="invoice-details-header">
+                <button type="button" className="text-button" onClick={onBack}>
+                    ← Back to Invoices
+                </button>
 
-            <button onClick={onBack} style={styles.backButton}>
-                ← Back
-            </button>
+                <div className="invoice-actions-group" style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+                    {/* Status badge in header */}
+                    <span className={`status-badge status-${invoice.status?.toLowerCase()}`} style={{ marginRight: "4px" }}>
+                        {invoice.status}
+                    </span>
 
-            <div style={styles.invoice}>
-
-                <div style={styles.header}>
-
-                    <div style={styles.business}>
-                        <h1>{invoice.business?.name}</h1>
-                        <p>{invoice.business?.address}</p>
-                        <p>GSTIN: {invoice.business?.gstin}</p>
-                        <p>State: {invoice.business?.state}</p>
-                        <p>Phone: {invoice.business?.phone}</p>
-                        <p>Email: {invoice.business?.email}</p>
-                        <p>{invoice.business?.website}</p>
-                    </div>
-
-                    <div style={styles.invoiceInfo}>
-                        <h2>TAX INVOICE</h2>
-                        <p>
-                            <strong>Invoice No:</strong>{" "}
-                            {invoice.invoiceNumber}
-                        </p>
-                        <p>
-                            <strong>Date:</strong>{" "}
-                            {invoice.invoiceDate}
-                        </p>
-                        <p>
-                            <strong>Status:</strong>{" "}
-                            {invoice.status}
-                        </p>
-                    </div>
-
-                </div>
-
-                <hr />
-
-                <div style={styles.billTo}>
-                    <h3>Bill To</h3>
-                    <p>
-                        <strong>{invoice.customer?.name}</strong>
-                    </p>
-                    <p>{invoice.customer?.address}</p>
-                    <p>GSTIN: {invoice.customer?.gstin}</p>
-                    <p>State: {invoice.customer?.state}</p>
-                    <p>Phone: {invoice.customer?.phone}</p>
-                    <p>Email: {invoice.customer?.email}</p>
-                </div>
-
-                <hr />
-
-                <h2>Invoice Items</h2>
-
-                <table style={styles.table}>
-                    <thead>
-                        <tr>
-                            <th style={styles.cell}>Product</th>
-                            <th style={styles.cell}>HSN</th>
-                            <th style={styles.cell}>Qty</th>
-                            <th style={styles.cell}>Price</th>
-                            <th style={styles.cell}>GST</th>
-                            <th style={styles.cell}>Tax</th>
-                            <th style={styles.cell}>Total</th>
-                        </tr>
-                    </thead>
-
-                    <tbody>
-                        {invoice.items.map((item) => (
-                            <tr key={item.id}>
-                                <td style={styles.cell}>
-                                    {item.productName}
-                                </td>
-                                <td style={styles.cell}>
-                                    {item.hsnCode}
-                                </td>
-                                <td style={styles.cell}>
-                                    {item.quantity}
-                                </td>
-                                <td style={styles.cell}>
-                                    {formatCurrency(item.unitPrice)}
-                                </td>
-                                <td style={styles.cell}>
-                                    {item.gstRate}%
-                                </td>
-                                <td style={styles.cell}>
-                                    {formatCurrency(item.taxAmount)}
-                                </td>
-                                <td style={styles.cell}>
-                                    {formatCurrency(item.totalAmount)}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-
-                <div style={styles.summary}>
-
-                    <div style={styles.summaryRow}>
-                        <span>Taxable Amount</span>
-                        <strong>
-                            {formatCurrency(invoice.taxableAmount)}
-                        </strong>
-                    </div>
-
-                    <div style={styles.summaryRow}>
-                        <span>CGST</span>
-                        <span>{formatCurrency(invoice.cgst)}</span>
-                    </div>
-
-                    <div style={styles.summaryRow}>
-                        <span>SGST</span>
-                        <span>{formatCurrency(invoice.sgst)}</span>
-                    </div>
-
-                    <div style={styles.summaryRow}>
-                        <span>IGST</span>
-                        <span>{formatCurrency(invoice.igst)}</span>
-                    </div>
-
-                    <hr />
-
-                    <div style={styles.grandTotal}>
-                        <strong>Grand Total</strong>
-                        <strong>
-                            {formatCurrency(invoice.grandTotal)}
-                        </strong>
-                    </div>
-
-                </div>
-
-                <div style={styles.actions}>
-
+                    {/* DRAFT Actions */}
                     {invoice.status === "DRAFT" && (
-                        <>
-                            <button
-                                onClick={handlePaid}
-                                style={styles.paidButton}
-                            >
-                                Mark as Paid
-                            </button>
+                        <button
+                            type="button"
+                            className="primary-button"
+                            onClick={handleIssue}
+                            disabled={actionLoading}
+                        >
+                            ✓ Issue Invoice
+                        </button>
+                    )}
 
-                            <button
-                                onClick={handleCancel}
-                                style={styles.cancelButton}
-                            >
-                                Cancel Invoice
-                            </button>
-                        </>
+                    {/* ISSUED Actions */}
+                    {invoice.status === "ISSUED" && (
+                        <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={handleMarkSent}
+                            disabled={actionLoading}
+                        >
+                            📤 Mark as Sent
+                        </button>
+                    )}
+
+                    {/* Record Payment for non-paid, non-cancelled */}
+                    {["ISSUED", "SENT", "PARTIALLY_PAID", "OVERDUE"].includes(invoice.status) && (
+                        <button
+                            type="button"
+                            className="success-button"
+                            onClick={() => {
+                                setPayAmount(balance.toFixed(2));
+                                setPayModalOpen(true);
+                            }}
+                            disabled={actionLoading}
+                        >
+                            💳 Record Payment
+                        </button>
+                    )}
+
+                    {/* Send Reminder button */}
+                    {invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
+                        <button
+                            type="button"
+                            className="whatsapp-button"
+                            onClick={handleOpenReminder}
+                            title="Send payment reminder via WhatsApp or Email"
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                            </svg>
+                            Remind Customer
+                        </button>
                     )}
 
                     <button
-                        onClick={downloadPdf}
-                        style={styles.pdfButton}
+                        type="button"
+                        className="secondary-button"
+                        onClick={handleDownloadPdf}
                     >
-                        Download PDF
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                            <polyline points="7 10 12 15 17 10" />
+                            <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                        PDF
                     </button>
 
+                    {invoice.status !== "CANCELLED" && invoice.status !== "PAID" && (
+                        <button
+                            type="button"
+                            className="danger-button"
+                            onClick={handleCancel}
+                            disabled={actionLoading}
+                        >
+                            Cancel
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Invoice Document Paper */}
+            <div className="invoice-paper">
+                {/* Top Section */}
+                <div className="invoice-paper-top">
+                    <div className="invoice-business-info">
+                        <h2>{business.name || "Business Name"}</h2>
+                        {business.address && <p>{business.address}</p>}
+                        {business.gstin && <p><strong>GSTIN:</strong> {business.gstin}</p>}
+                        {business.state && <p><strong>State:</strong> {business.state} {business.stateCode ? `(${business.stateCode})` : ""}</p>}
+                        {business.phone && <p><strong>Phone:</strong> {business.phone}</p>}
+                        {business.email && <p><strong>Email:</strong> {business.email}</p>}
+                        {business.website && <p><strong>Web:</strong> {business.website}</p>}
+                    </div>
+
+                    <div className="invoice-meta">
+                        <div className="invoice-badge-title">TAX INVOICE</div>
+                        <div className="invoice-meta-row">
+                            <strong>Invoice No:</strong> {invoice.invoiceNumber}
+                        </div>
+                        <div className="invoice-meta-row">
+                            <strong>Date:</strong> {invoice.invoiceDate}
+                        </div>
+                        <div className="invoice-meta-row" style={{ marginTop: "8px" }}>
+                            <span className={`status-badge status-${invoice.status?.toLowerCase()}`}>
+                                {invoice.status}
+                            </span>
+                        </div>
+                    </div>
                 </div>
 
+                {/* Bill To */}
+                <div className="invoice-paper-billto">
+                    <h3>Bill To / Customer</h3>
+                    <strong>{customer.name}</strong>
+                    {customer.address && <p>{customer.address}</p>}
+                    {customer.gstin && <p><strong>GSTIN:</strong> {customer.gstin}</p>}
+                    {customer.state && <p><strong>State:</strong> {customer.state} {customer.stateCode ? `(Code: ${customer.stateCode})` : ""}</p>}
+                    {customer.phone && <p><strong>Phone:</strong> {customer.phone}</p>}
+                    {customer.email && <p><strong>Email:</strong> {customer.email}</p>}
+                </div>
+
+                {/* Items Table */}
+                <div className="table-responsive">
+                    <table className="invoice-items-table">
+                        <thead>
+                            <tr>
+                                <th>Product / Service</th>
+                                <th>HSN</th>
+                                <th style={{ textAlign: "center" }}>Qty</th>
+                                <th style={{ textAlign: "right" }}>Unit Price</th>
+                                <th style={{ textAlign: "center" }}>GST %</th>
+                                <th style={{ textAlign: "right" }}>Tax Amount</th>
+                                <th style={{ textAlign: "right" }}>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {invoice.items?.map((item) => (
+                                <tr key={item.id}>
+                                    <td><strong>{item.productName}</strong></td>
+                                    <td>{item.hsnCode || "—"}</td>
+                                    <td style={{ textAlign: "center" }}>{item.quantity}</td>
+                                    <td style={{ textAlign: "right" }}>{formatCurrency(item.unitPrice)}</td>
+                                    <td style={{ textAlign: "center" }}>{item.gstRate}%</td>
+                                    <td style={{ textAlign: "right" }}>{formatCurrency(item.taxAmount)}</td>
+                                    <td style={{ textAlign: "right" }}><strong>{formatCurrency(item.totalAmount)}</strong></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Totals & Notes Section */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginTop: "24px" }}>
+                    {/* Left: Amount in Words, Bank Details, Terms */}
+                    <div>
+                        {invoice.amountInWords && (
+                            <div style={{ marginBottom: "16px", padding: "10px", background: "var(--bg-secondary)", borderRadius: "6px", fontSize: "13px" }}>
+                                <span style={{ fontSize: "11px", fontWeight: "700", color: "var(--text-muted)", display: "block", textTransform: "uppercase" }}>Amount in Words:</span>
+                                <strong style={{ color: "var(--text-primary)" }}>{invoice.amountInWords}</strong>
+                            </div>
+                        )}
+
+                        {/* Bank Details */}
+                        {(business.bankName || business.bankAccountNumber || business.upiId) && (
+                            <div style={{ marginBottom: "16px", padding: "12px", border: "1px dashed var(--border-color)", borderRadius: "6px", fontSize: "12px" }}>
+                                <strong style={{ display: "block", marginBottom: "6px", color: "var(--text-primary)" }}>🏦 Bank & Payment Details</strong>
+                                {business.bankName && <div><strong>Bank:</strong> {business.bankName}</div>}
+                                {business.bankAccountNumber && <div><strong>A/C No:</strong> {business.bankAccountNumber}</div>}
+                                {business.bankIfsc && <div><strong>IFSC:</strong> {business.bankIfsc}</div>}
+                                {business.upiId && <div><strong>UPI ID:</strong> {business.upiId}</div>}
+                            </div>
+                        )}
+
+                        {/* Terms */}
+                        {(invoice.termsAndConditions || business.defaultTerms) && (
+                            <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                                <strong style={{ display: "block", marginBottom: "4px", color: "var(--text-primary)" }}>Terms & Conditions:</strong>
+                                <p style={{ whiteSpace: "pre-line", margin: 0 }}>
+                                    {invoice.termsAndConditions || business.defaultTerms}
+                                </p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Right: Detailed Totals Box */}
+                    <div className="invoice-paper-totals">
+                        <div className="invoice-paper-totals-box">
+                            <div className="paper-total-line">
+                                <span>Taxable Amount</span>
+                                <strong>{formatCurrency(invoice.taxableAmount)}</strong>
+                            </div>
+
+                            {Number(invoice.discountAmount || 0) > 0 && (
+                                <div className="paper-total-line" style={{ color: "var(--success)" }}>
+                                    <span>Discount</span>
+                                    <span>- {formatCurrency(invoice.discountAmount)}</span>
+                                </div>
+                            )}
+
+                            {Number(invoice.cgst || 0) > 0 && (
+                                <div className="paper-total-line">
+                                    <span>CGST</span>
+                                    <span>{formatCurrency(invoice.cgst)}</span>
+                                </div>
+                            )}
+
+                            {Number(invoice.sgst || 0) > 0 && (
+                                <div className="paper-total-line">
+                                    <span>SGST</span>
+                                    <span>{formatCurrency(invoice.sgst)}</span>
+                                </div>
+                            )}
+
+                            {Number(invoice.igst || 0) > 0 && (
+                                <div className="paper-total-line">
+                                    <span>IGST</span>
+                                    <span>{formatCurrency(invoice.igst)}</span>
+                                </div>
+                            )}
+
+                            <div className="paper-total-line">
+                                <span>Total Tax</span>
+                                <span>{formatCurrency(invoice.totalTax)}</span>
+                            </div>
+
+                            <div className="paper-total-line grand">
+                                <span>Grand Total</span>
+                                <span>{formatCurrency(invoice.grandTotal)}</span>
+                            </div>
+
+                            {paid > 0 && (
+                                <div className="paper-total-line" style={{ color: "var(--success)", borderTop: "1px dashed var(--border-color)", paddingTop: "8px" }}>
+                                    <span>Total Paid</span>
+                                    <strong>{formatCurrency(paid)}</strong>
+                                </div>
+                            )}
+
+                            <div className="paper-total-line" style={{ color: balance > 0 ? "var(--warning)" : "var(--success)", fontWeight: "700" }}>
+                                <span>Balance Due</span>
+                                <strong>{formatCurrency(balance)}</strong>
+                            </div>
+
+                            {business.signature && (
+                                <div style={{ marginTop: "20px", textAlign: "right" }}>
+                                    <img
+                                        src={business.signature}
+                                        alt="Authorised Signatory"
+                                        style={{ maxHeight: "48px", objectFit: "contain", marginBottom: "4px" }}
+                                    />
+                                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Authorised Signatory</div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
+
+            {/* QUICK PAYMENT MODAL */}
+            {payModalOpen && (
+                <div className="modal-backdrop" onClick={() => setPayModalOpen(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: "440px" }}>
+                        <div className="modal-header">
+                            <h2>💳 Record Payment for {invoice.invoiceNumber}</h2>
+                            <button type="button" className="modal-close-btn" onClick={() => setPayModalOpen(false)}>✕</button>
+                        </div>
+                        <form onSubmit={handleRecordPayment} className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div className="reminder-summary-card">
+                                <div className="reminder-summary-item">
+                                    <span>Grand Total:</span>
+                                    <strong>{formatCurrency(invoice.grandTotal)}</strong>
+                                </div>
+                                <div className="reminder-summary-item">
+                                    <span>Already Paid:</span>
+                                    <strong style={{ color: "var(--success)" }}>{formatCurrency(paid)}</strong>
+                                </div>
+                                <div className="reminder-summary-item" style={{ borderTop: "1px solid var(--border-color)", paddingTop: "6px" }}>
+                                    <span>Balance Due:</span>
+                                    <strong style={{ color: "var(--warning)", fontSize: "15px" }}>{formatCurrency(balance)}</strong>
+                                </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Payment Amount (₹) <span style={{ color: "var(--danger)" }}>*</span></label>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    className="form-control"
+                                    required
+                                    value={payAmount}
+                                    max={balance}
+                                    min="0.01"
+                                    onChange={e => setPayAmount(e.target.value)}
+                                    placeholder="Amount received"
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Payment Mode <span style={{ color: "var(--danger)" }}>*</span></label>
+                                <select
+                                    className="form-control"
+                                    value={payMethod}
+                                    onChange={e => setPayMethod(e.target.value)}
+                                >
+                                    <option value="UPI">UPI / QR Code</option>
+                                    <option value="BANK_TRANSFER">Bank Transfer (NEFT/RTGS/IMPS)</option>
+                                    <option value="CASH">Cash</option>
+                                    <option value="CHEQUE">Cheque</option>
+                                    <option value="CARD">Credit / Debit Card</option>
+                                </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Reference / UTR / Cheque Number</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    value={payRef}
+                                    onChange={e => setPayRef(e.target.value)}
+                                    placeholder="e.g. UTR-982348123"
+                                />
+                            </div>
+
+                            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
+                                <button type="button" className="secondary-button" onClick={() => setPayModalOpen(false)}>
+                                    Cancel
+                                </button>
+                                <button type="submit" className="primary-button" disabled={actionLoading}>
+                                    {actionLoading ? "Recording..." : "Save Payment"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* REMINDER MODAL */}
+            {reminderModalOpen && reminderData && (
+                <div className="modal-backdrop" onClick={() => setReminderModalOpen(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2>
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                                </svg>
+                                Send Payment Reminder
+                            </h2>
+                            <button
+                                type="button"
+                                className="modal-close-btn"
+                                onClick={() => setReminderModalOpen(false)}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        <div className="modal-body">
+                            {/* Customer Summary Card */}
+                            <div className="reminder-summary-card">
+                                <div className="reminder-summary-item">
+                                    <span>Customer:</span>
+                                    <strong>{reminderData.customerName}</strong>
+                                </div>
+                                <div className="reminder-summary-item">
+                                    <span>Phone:</span>
+                                    <strong>{reminderData.customerPhone || "Not provided"}</strong>
+                                </div>
+                                <div className="reminder-summary-item">
+                                    <span>Email:</span>
+                                    <strong>{reminderData.customerEmail || "Not provided"}</strong>
+                                </div>
+                                <div className="reminder-summary-item" style={{ borderTop: "1px solid var(--border-color)", paddingTop: "6px", marginTop: "6px" }}>
+                                    <span>Total Due:</span>
+                                    <strong style={{ color: "var(--primary)", fontSize: "15px" }}>{reminderData.amount}</strong>
+                                </div>
+                            </div>
+
+                            {/* Message Preview */}
+                            <label style={{ fontSize: "12px", fontWeight: "700", color: "var(--text-muted)", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>
+                                Reminder Message Preview
+                            </label>
+                            <div className="reminder-preview-box">
+                                {reminderData.messageText}
+                            </div>
+
+                            {reminderEmailStatus.text && (
+                                <div className={reminderEmailStatus.type === "success" ? "form-success" : "form-error"}>
+                                    {reminderEmailStatus.text}
+                                </div>
+                            )}
+
+                            {/* Actions List */}
+                            <div className="reminder-actions-vertical">
+                                {/* Option 1: WhatsApp */}
+                                <a
+                                    href={reminderData.whatsappUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="reminder-action-card whatsapp"
+                                >
+                                    <div className="reminder-action-icon whatsapp">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+                                        </svg>
+                                    </div>
+                                    <div className="reminder-action-text">
+                                        <strong>Send via WhatsApp</strong>
+                                        <span>
+                                            {reminderData.customerPhone
+                                                ? `Open WhatsApp chat with ${reminderData.customerPhone}`
+                                                : "Open WhatsApp to select contact"}
+                                        </span>
+                                    </div>
+                                </a>
+
+                                {/* Option 2: Email */}
+                                <button
+                                    type="button"
+                                    className="reminder-action-card"
+                                    onClick={handleSendEmailReminder}
+                                    disabled={reminderEmailSending || !reminderData.customerEmail}
+                                >
+                                    <div className="reminder-action-icon email">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                            <polyline points="22,6 12,13 2,6" />
+                                        </svg>
+                                    </div>
+                                    <div className="reminder-action-text">
+                                        <strong>{reminderEmailSending ? "Sending Email..." : "Send Email Reminder"}</strong>
+                                        <span>
+                                            {reminderData.customerEmail
+                                                ? `Deliver invoice reminder to ${reminderData.customerEmail}`
+                                                : "Email not set for this customer"}
+                                        </span>
+                                    </div>
+                                </button>
+
+                                {/* Option 3: Copy Text */}
+                                <button
+                                    type="button"
+                                    className="secondary-button"
+                                    onClick={handleCopyMessage}
+                                    style={{ width: "100%" }}
+                                >
+                                    {copied ? "✓ Copied to Clipboard!" : "Copy Reminder Text"}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
-
-const styles = {
-    container: {
-        padding: "40px",
-        maxWidth: "1100px",
-        margin: "0 auto",
-        fontFamily: "Arial"
-    },
-
-    backButton: {
-        padding: "10px 16px",
-        cursor: "pointer",
-        marginBottom: "20px"
-    },
-
-    invoice: {
-        border: "1px solid #ddd",
-        padding: "30px",
-        borderRadius: "8px"
-    },
-
-    header: {
-        display: "flex",
-        justifyContent: "space-between",
-        gap: "40px"
-    },
-
-    business: {
-        flex: 1
-    },
-
-    invoiceInfo: {
-        textAlign: "right"
-    },
-
-    billTo: {
-        marginTop: "20px",
-        marginBottom: "20px"
-    },
-
-    table: {
-        width: "100%",
-        borderCollapse: "collapse",
-        marginTop: "20px"
-    },
-
-    cell: {
-        border: "1px solid #ddd",
-        padding: "12px",
-        textAlign: "left"
-    },
-
-    summary: {
-        marginTop: "30px",
-        marginLeft: "auto",
-        maxWidth: "400px"
-    },
-
-    summaryRow: {
-        display: "flex",
-        justifyContent: "space-between",
-        padding: "8px 0"
-    },
-
-    grandTotal: {
-        display: "flex",
-        justifyContent: "space-between",
-        fontSize: "22px",
-        padding: "12px 0"
-    },
-
-    actions: {
-        marginTop: "25px",
-        display: "flex",
-        gap: "10px",
-        justifyContent: "flex-end"
-    },
-
-    paidButton: {
-        padding: "12px 20px",
-        cursor: "pointer"
-    },
-
-    cancelButton: {
-        padding: "12px 20px",
-        cursor: "pointer"
-    },
-
-    pdfButton: {
-        padding: "12px 20px",
-        cursor: "pointer",
-        border: "none",
-        borderRadius: "6px",
-        backgroundColor: "#222",
-        color: "white"
-    },
-
-    message: {
-        padding: "40px",
-        textAlign: "center"
-    },
-
-    error: {
-        padding: "40px",
-        textAlign: "center",
-        color: "red"
-    }
-};
-
-export default InvoiceDetails;

@@ -9,14 +9,14 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Entity
-@Table(name = "invoice")
+@Table(name = "invoice", uniqueConstraints = @UniqueConstraint(name = "uk_business_invoice_num", columnNames = {"business_id", "invoice_number"}))
 public class Invoice {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "invoice_number", nullable = false, unique = true)
+    @Column(name = "invoice_number", nullable = false)
     private String invoiceNumber;
 
     @Column(name = "invoice_date", nullable = false)
@@ -73,10 +73,40 @@ public class Invoice {
     @Column(name = "grand_total", nullable = false)
     private BigDecimal grandTotal;
 
+    @Column(name = "due_date")
+    private LocalDate dueDate;
+
+    @Column(name = "discount_amount")
+    private BigDecimal discountAmount = BigDecimal.ZERO;
+
+    @Column(name = "paid_amount")
+    private BigDecimal paidAmount = BigDecimal.ZERO;
+
+    @Column(name = "balance_amount")
+    private BigDecimal balanceAmount = BigDecimal.ZERO;
+
+    @Column(name = "reverse_charge")
+    private Boolean reverseCharge = false;
+
+    @Column(name = "export_type")
+    private Boolean exportType = false;
+
+    @Column(name = "amount_in_words")
+    private String amountInWords;
+
+    @Column(name = "notes", columnDefinition = "TEXT")
+    private String notes;
+
+    @Column(name = "terms_and_conditions", columnDefinition = "TEXT")
+    private String termsAndConditions;
+
     private String status;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
 
     // =========================
@@ -225,5 +255,85 @@ public class Invoice {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public LocalDate getDueDate() {
+        return dueDate;
+    }
+
+    public void setDueDate(LocalDate dueDate) {
+        this.dueDate = dueDate;
+    }
+
+    public BigDecimal getDiscountAmount() {
+        return discountAmount;
+    }
+
+    public void setDiscountAmount(BigDecimal discountAmount) {
+        this.discountAmount = discountAmount;
+    }
+
+    public BigDecimal getPaidAmount() {
+        return paidAmount;
+    }
+
+    public void setPaidAmount(BigDecimal paidAmount) {
+        this.paidAmount = paidAmount;
+    }
+
+    public BigDecimal getBalanceAmount() {
+        return balanceAmount;
+    }
+
+    public void setBalanceAmount(BigDecimal balanceAmount) {
+        this.balanceAmount = balanceAmount;
+    }
+
+    public Boolean getReverseCharge() {
+        return reverseCharge;
+    }
+
+    public void setReverseCharge(Boolean reverseCharge) {
+        this.reverseCharge = reverseCharge;
+    }
+
+    public Boolean getExportType() {
+        return exportType;
+    }
+
+    public void setExportType(Boolean exportType) {
+        this.exportType = exportType;
+    }
+
+    public String getAmountInWords() {
+        return amountInWords;
+    }
+
+    public void setAmountInWords(String amountInWords) {
+        this.amountInWords = amountInWords;
+    }
+
+    public String getNotes() {
+        return notes;
+    }
+
+    public void setNotes(String notes) {
+        this.notes = notes;
+    }
+
+    public String getTermsAndConditions() {
+        return termsAndConditions;
+    }
+
+    public void setTermsAndConditions(String termsAndConditions) {
+        this.termsAndConditions = termsAndConditions;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

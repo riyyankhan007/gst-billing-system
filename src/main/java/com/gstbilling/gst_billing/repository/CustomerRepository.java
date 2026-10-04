@@ -8,4 +8,7 @@ import java.util.Optional;
 public interface CustomerRepository extends JpaRepository<Customer, Long> {
     List<Customer> findByBusinessId(Long businessId);
     Optional<Customer> findByIdAndBusinessId(Long id, Long businessId);
+    boolean existsByGstinIgnoreCaseAndBusinessId(String gstin, Long businessId);
+    boolean existsByGstinIgnoreCaseAndBusinessIdAndIdNot(String gstin, Long businessId, Long id);
+    List<Customer> findByBusinessIdAndCustomerType(Long businessId, String customerType);
 }

@@ -2,11 +2,12 @@ package com.gstbilling.gst_billing.service;
 
 import com.gstbilling.gst_billing.entity.Business;
 import com.gstbilling.gst_billing.repository.BusinessRepository;
-import org.springframework.stereotype.Service;
-
+import com.gstbilling.gst_billing.util.IndianTaxValidator;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,20 +27,115 @@ public class BusinessService {
     public Business getBusiness() {
         return currentUserService.getCurrentUser().getBusiness();
     }
+
     public Business updateBusiness(Business changes) {
         Business business = getBusiness();
-        business.setName(changes.getName()); business.setGstin(changes.getGstin()); business.setAddress(changes.getAddress());
-        business.setState(changes.getState()); business.setStateCode(changes.getStateCode()); business.setPhone(changes.getPhone());
-        business.setEmail(changes.getEmail()); business.setWebsite(changes.getWebsite()); business.setLogo(changes.getLogo()); business.setInvoicePrefix(changes.getInvoicePrefix());
+
+        if (changes.getName() != null && !changes.getName().isBlank()) {
+            business.setName(changes.getName().trim());
+        }
+
+        // GSTIN validation & uniqueness
+        if (changes.getGstin() != null && !changes.getGstin().isBlank()) {
+            String cleanGstin = changes.getGstin().trim().toUpperCase();
+            if (!IndianTaxValidator.isValidGstin(cleanGstin)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid GSTIN format. Expected format: 22AAAAA0000A1Z5");
+            }
+
+            if (businessRepository.existsByGstinIgnoreCaseAndIdNot(cleanGstin, business.getId())) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Another business is already registered with this GSTIN.");
+            }
+            business.setGstin(cleanGstin);
+
+            // Auto-extract PAN from GSTIN if PAN is not explicitly set
+            if (business.getPan() == null || business.getPan().isBlank()) {
+                business.setPan(IndianTaxValidator.extractPanFromGstin(cleanGstin));
+            }
+        } else {
+            business.setGstin(null);
+        }
+
+        // PAN validation
+        if (changes.getPan() != null && !changes.getPan().isBlank()) {
+            String cleanPan = changes.getPan().trim().toUpperCase();
+            if (!IndianTaxValidator.isValidPan(cleanPan)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid PAN format. Expected format: AAAAA0000A");
+            }
+            business.setPan(cleanPan);
+        }
+
+        // Bank IFSC validation
+        if (changes.getBankIfsc() != null && !changes.getBankIfsc().isBlank()) {
+            String cleanIfsc = changes.getBankIfsc().trim().toUpperCase();
+            if (!IndianTaxValidator.isValidIfsc(cleanIfsc)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid Bank IFSC format. Expected 11 characters (e.g. HDFC0001234)");
+            }
+            business.setBankIfsc(cleanIfsc);
+        } else {
+            business.setBankIfsc(changes.getBankIfsc());
+        }
+
+        business.setAddress(changes.getAddress());
+        business.setState(changes.getState());
+        business.setStateCode(changes.getStateCode());
+        business.setPhone(changes.getPhone());
+        business.setEmail(changes.getEmail());
+        business.setWebsite(changes.getWebsite());
+
+        if (changes.getInvoicePrefix() != null && !changes.getInvoicePrefix().isBlank()) {
+            business.setInvoicePrefix(changes.getInvoicePrefix().trim().toUpperCase());
+        }
+
+        if (changes.getFinancialYear() != null && !changes.getFinancialYear().isBlank()) {
+            business.setFinancialYear(changes.getFinancialYear().trim());
+        }
+
+        if (changes.getInvoiceSeqNumber() != null && changes.getInvoiceSeqNumber() > 0) {
+            business.setInvoiceSeqNumber(changes.getInvoiceSeqNumber());
+        }
+
+        business.setBankName(changes.getBankName());
+        business.setBankAccountNumber(changes.getBankAccountNumber());
+        business.setUpiId(changes.getUpiId());
+        business.setUpiQrCode(changes.getUpiQrCode());
+        business.setDefaultTerms(changes.getDefaultTerms());
+
         return businessRepository.save(business);
     }
+
     public Business saveLogo(MultipartFile file) {
-        if (file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a logo file");
-        String filename = "business-" + getBusiness().getId() + "-" + System.currentTimeMillis() + "-" + Path.of(file.getOriginalFilename()).getFileName();
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a logo file");
+        }
+        String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "logo.png";
+        String filename = "business-" + getBusiness().getId() + "-logo-" + System.currentTimeMillis() + "-" + Path.of(original).getFileName();
         try {
-            Path directory = Path.of("uploads").toAbsolutePath(); Files.createDirectories(directory);
+            Path directory = Path.of("uploads").toAbsolutePath();
+            Files.createDirectories(directory);
             Files.copy(file.getInputStream(), directory.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
-            Business business = getBusiness(); business.setLogo("/uploads/" + filename); return businessRepository.save(business);
-        } catch (IOException e) { throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save logo"); }
+            Business business = getBusiness();
+            business.setLogo("/uploads/" + filename);
+            return businessRepository.save(business);
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save logo");
+        }
+    }
+
+    public Business saveSignature(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a signature/stamp file");
+        }
+        String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "signature.png";
+        String filename = "business-" + getBusiness().getId() + "-signature-" + System.currentTimeMillis() + "-" + Path.of(original).getFileName();
+        try {
+            Path directory = Path.of("uploads").toAbsolutePath();
+            Files.createDirectories(directory);
+            Files.copy(file.getInputStream(), directory.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
+            Business business = getBusiness();
+            business.setSignature("/uploads/" + filename);
+            return businessRepository.save(business);
+        } catch (IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save signature/stamp");
+        }
     }
 }
