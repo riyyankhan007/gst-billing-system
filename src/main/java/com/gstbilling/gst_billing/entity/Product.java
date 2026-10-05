@@ -31,7 +31,7 @@ public class Product {
     private BigDecimal discount = BigDecimal.ZERO;
 
     @Column(name = "tax_inclusive")
-    private boolean taxInclusive = false;
+    private Boolean taxInclusive = false;
 
     @Column(name = "stock_quantity")
     private BigDecimal stockQuantity = BigDecimal.ZERO;
@@ -116,11 +116,15 @@ public class Product {
     }
 
     public boolean isTaxInclusive() {
-        return taxInclusive;
+        return Boolean.TRUE.equals(taxInclusive);
     }
 
-    public void setTaxInclusive(boolean taxInclusive) {
-        this.taxInclusive = taxInclusive;
+    public Boolean getTaxInclusive() {
+        return Boolean.TRUE.equals(taxInclusive);
+    }
+
+    public void setTaxInclusive(Boolean taxInclusive) {
+        this.taxInclusive = Boolean.TRUE.equals(taxInclusive);
     }
 
     public BigDecimal getStockQuantity() {

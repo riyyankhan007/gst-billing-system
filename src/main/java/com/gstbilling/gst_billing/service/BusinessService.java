@@ -5,6 +5,7 @@ import com.gstbilling.gst_billing.repository.BusinessRepository;
 import com.gstbilling.gst_billing.util.IndianTaxValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -18,16 +19,27 @@ public class BusinessService {
 
     private final BusinessRepository businessRepository;
     private final CurrentUserService currentUserService;
+    private final AuditLogService auditLogService;
 
-    public BusinessService(BusinessRepository businessRepository, CurrentUserService currentUserService) {
+    public BusinessService(BusinessRepository businessRepository,
+                           CurrentUserService currentUserService,
+                           AuditLogService auditLogService) {
         this.businessRepository = businessRepository;
         this.currentUserService = currentUserService;
+        this.auditLogService = auditLogService;
     }
 
+    @Transactional(readOnly = true)
     public Business getBusiness() {
+        Long tenantId = currentUserService.getCurrentTenantId();
+        if (tenantId != null) {
+            return businessRepository.findById(tenantId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Business not found"));
+        }
         return currentUserService.getCurrentUser().getBusiness();
     }
 
+    @Transactional
     public Business updateBusiness(Business changes) {
         Business business = getBusiness();
 
@@ -100,9 +112,12 @@ public class BusinessService {
         business.setUpiQrCode(changes.getUpiQrCode());
         business.setDefaultTerms(changes.getDefaultTerms());
 
-        return businessRepository.save(business);
+        Business saved = businessRepository.save(business);
+        auditLogService.logAction("UPDATE_BUSINESS", "BUSINESS", saved.getId(), "Business settings updated");
+        return saved;
     }
 
+    @Transactional
     public Business saveLogo(MultipartFile file) {
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a logo file");
@@ -115,12 +130,15 @@ public class BusinessService {
             Files.copy(file.getInputStream(), directory.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
             Business business = getBusiness();
             business.setLogo("/uploads/" + filename);
-            return businessRepository.save(business);
+            Business saved = businessRepository.save(business);
+            auditLogService.logAction("UPDATE_LOGO", "BUSINESS", saved.getId(), "Business logo updated");
+            return saved;
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save logo");
         }
     }
 
+    @Transactional
     public Business saveSignature(MultipartFile file) {
         if (file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a signature/stamp file");
@@ -133,7 +151,9 @@ public class BusinessService {
             Files.copy(file.getInputStream(), directory.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
             Business business = getBusiness();
             business.setSignature("/uploads/" + filename);
-            return businessRepository.save(business);
+            Business saved = businessRepository.save(business);
+            auditLogService.logAction("UPDATE_SIGNATURE", "BUSINESS", saved.getId(), "Business signature updated");
+            return saved;
         } catch (IOException e) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save signature/stamp");
         }

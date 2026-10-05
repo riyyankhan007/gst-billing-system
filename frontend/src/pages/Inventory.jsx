@@ -116,9 +116,12 @@ export default function Inventory() {
             )}
 
             {/* Stock Movements Log Table */}
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-                <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--border)" }}>
-                    <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "600" }}>Stock Audit Trail</h3>
+            <div className="table-card">
+                <div className="table-header-card">
+                    <div>
+                        <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>Stock Audit Trail</h3>
+                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>Complete immutable ledger of all stock ins, outs, purchases, and manual adjustments</span>
+                    </div>
                 </div>
                 {loading ? (
                     <div style={{ padding: "40px", textAlign: "center" }}>
@@ -126,52 +129,63 @@ export default function Inventory() {
                         <p>Loading inventory history...</p>
                     </div>
                 ) : movements.length === 0 ? (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
+                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
                         <p>No inventory movements recorded yet. Issue invoices or record purchases to see stock flow.</p>
                     </div>
                 ) : (
-                    <table className="table" style={{ width: "100%", margin: 0 }}>
-                        <thead>
-                            <tr>
-                                <th>Timestamp</th>
-                                <th>Product</th>
-                                <th>Movement Type</th>
-                                <th>Ref #</th>
-                                <th style={{ textAlign: "right" }}>Quantity</th>
-                                <th style={{ textAlign: "right" }}>Stock Before</th>
-                                <th style={{ textAlign: "right" }}>Stock After</th>
-                                <th>Reason / Notes</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {movements.map(m => {
-                                const isPositive = Number(m.quantity) > 0;
-                                return (
-                                    <tr key={m.id}>
-                                        <td style={{ fontSize: "12px" }}>
-                                            {m.createdAt ? new Date(m.createdAt).toLocaleString() : "-"}
-                                        </td>
-                                        <td style={{ fontWeight: "600" }}>{m.product ? m.product.name : "Product"}</td>
-                                        <td>
-                                            <span className="badge" style={{
-                                                background: m.movementType === "PURCHASE" ? "rgba(16,185,129,0.15)" : "rgba(99,102,241,0.15)",
-                                                color: m.movementType === "PURCHASE" ? "#065f46" : "#4338ca"
-                                            }}>
-                                                {m.movementType}
-                                            </span>
-                                        </td>
-                                        <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{m.referenceNumber || "-"}</td>
-                                        <td style={{ textAlign: "right", fontWeight: "700", color: isPositive ? "#10b981" : "#ef4444" }}>
-                                            {isPositive ? `+${m.quantity}` : m.quantity}
-                                        </td>
-                                        <td style={{ textAlign: "right" }}>{m.stockBefore !== null ? m.stockBefore : "-"}</td>
-                                        <td style={{ textAlign: "right", fontWeight: "600" }}>{m.stockAfter !== null ? m.stockAfter : "-"}</td>
-                                        <td style={{ fontSize: "12px", color: "var(--muted)" }}>{m.notes || "-"}</td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                    <div className="table-container">
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Product</th>
+                                    <th>Movement Type</th>
+                                    <th>Ref #</th>
+                                    <th style={{ textAlign: "right" }}>Quantity</th>
+                                    <th style={{ textAlign: "right" }}>Stock Before</th>
+                                    <th style={{ textAlign: "right", paddingRight: "24px" }}>Stock After</th>
+                                    <th style={{ paddingLeft: "16px" }}>Reason / Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {movements.map(m => {
+                                    const isPositive = Number(m.quantity) > 0;
+                                    return (
+                                        <tr key={m.id}>
+                                            <td style={{ fontSize: "12.5px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
+                                                {m.createdAt ? new Date(m.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "medium" }) : "—"}
+                                            </td>
+                                            <td><strong>{m.product ? m.product.name : "Product"}</strong></td>
+                                            <td>
+                                                <span className="badge" style={{
+                                                    background: m.movementType === "PURCHASE" ? "rgba(16,185,129,0.12)" : m.movementType === "INVOICE" ? "rgba(99,102,241,0.12)" : "rgba(245,158,11,0.12)",
+                                                    color: m.movementType === "PURCHASE" ? "#065f46" : m.movementType === "INVOICE" ? "#4338ca" : "#b45309",
+                                                    fontWeight: 600
+                                                }}>
+                                                    {m.movementType}
+                                                </span>
+                                            </td>
+                                            <td style={{ letterSpacing: "0.2px", color: "var(--text-primary)", fontWeight: 500 }}>
+                                                {m.referenceNumber || "—"}
+                                            </td>
+                                            <td className="table-num" style={{ textAlign: "right", fontWeight: "700", color: isPositive ? "#10b981" : "#ef4444" }}>
+                                                {isPositive ? `+${m.quantity}` : m.quantity}
+                                            </td>
+                                            <td className="table-num" style={{ textAlign: "right" }}>
+                                                {m.stockBefore !== null ? m.stockBefore : "—"}
+                                            </td>
+                                            <td className="table-num" style={{ textAlign: "right", paddingRight: "24px", fontWeight: "700" }}>
+                                                {m.stockAfter !== null ? m.stockAfter : "—"}
+                                            </td>
+                                            <td style={{ paddingLeft: "16px", fontSize: "12.5px", color: "var(--text-secondary)" }}>
+                                                {m.notes || "—"}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 

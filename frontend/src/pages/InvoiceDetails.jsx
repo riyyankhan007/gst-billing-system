@@ -7,7 +7,14 @@ import {
     downloadInvoicePdf,
     getInvoiceReminder,
     sendInvoiceReminderEmail,
-    recordPayment
+    recordPayment,
+    generateEInvoice,
+    cancelEInvoice,
+    generateEWayBill,
+    cancelEWayBill,
+    getEWayBills,
+    getPaymentsForInvoice,
+    downloadPaymentReceiptPdf
 } from "../services/api";
 
 export default function InvoiceDetails({ invoiceId, onBack }) {
@@ -15,6 +22,21 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [actionLoading, setActionLoading] = useState(false);
+
+    // E-Invoice state
+    const [eInvoiceCancelModalOpen, setEInvoiceCancelModalOpen] = useState(false);
+    const [cancelReason, setCancelReason] = useState("1");
+    const [cancelRemarks, setCancelRemarks] = useState("Order cancelled by customer");
+
+    // E-Way Bill state
+    const [ewayModalOpen, setEwayModalOpen] = useState(false);
+    const [ewbDistance, setEwbDistance] = useState("100");
+    const [ewbTransporterId, setEwbTransporterId] = useState("");
+    const [ewbVehicleNumber, setEwbVehicleNumber] = useState("");
+    const [ewayBills, setEwayBills] = useState([]);
+
+    // Payments for this invoice
+    const [payments, setPayments] = useState([]);
 
     // Reminder modal state
     const [reminderModalOpen, setReminderModalOpen] = useState(false);
@@ -37,8 +59,14 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
     async function loadInvoice() {
         try {
             setLoading(true);
-            const data = await getInvoiceById(invoiceId);
+            const [data, pays, ewbs] = await Promise.all([
+                getInvoiceById(invoiceId),
+                getPaymentsForInvoice(invoiceId).catch(() => []),
+                getEWayBills(invoiceId).catch(() => [])
+            ]);
             setInvoice(data);
+            setPayments(pays || []);
+            setEwayBills(ewbs || []);
             setError("");
         } catch (err) {
             setError(err.message || "Failed to load invoice");
@@ -107,15 +135,20 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             alert(`Payment amount (${formatCurrency(amt)}) cannot exceed balance due (${formatCurrency(bal)})`);
             return;
         }
+
+        const idempotencyKey = (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : ("pay_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
+
         try {
             setActionLoading(true);
             await recordPayment({
                 invoiceId: invoice.id,
                 amount: amt,
-                paymentMode: payMethod,
+                paymentMethod: payMethod,
                 referenceNumber: payRef,
                 paymentDate: new Date().toISOString().split("T")[0]
-            });
+            }, idempotencyKey);
             setPayModalOpen(false);
             setPayAmount("");
             setPayRef("");
@@ -124,6 +157,86 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             alert(err.message || "Failed to record payment");
         } finally {
             setActionLoading(false);
+        }
+    }
+
+    async function handleGenerateEInvoice() {
+        try {
+            setActionLoading(true);
+            await generateEInvoice(invoice.id);
+            await loadInvoice();
+            alert("Statutory E-Invoice (IRN) generated successfully!");
+        } catch (err) {
+            alert(err.message || "Failed to generate E-Invoice");
+        } finally {
+            setActionLoading(false);
+        }
+    }
+
+    async function handleCancelEInvoice(e) {
+        e.preventDefault();
+        try {
+            setActionLoading(true);
+            await cancelEInvoice(invoice.id, cancelReason, cancelRemarks);
+            setEInvoiceCancelModalOpen(false);
+            await loadInvoice();
+            alert("Statutory E-Invoice cancelled successfully.");
+        } catch (err) {
+            alert(err.message || "Failed to cancel E-Invoice");
+        } finally {
+            setActionLoading(false);
+        }
+    }
+
+    async function handleGenerateEWayBill(e) {
+        e.preventDefault();
+        try {
+            setActionLoading(true);
+            await generateEWayBill(invoice.id, {
+                distanceKm: Number(ewbDistance || 100),
+                transporterId: ewbTransporterId || null,
+                vehicleNumber: ewbVehicleNumber || null,
+                transportMode: "ROAD",
+                supplyType: "OUTWARD"
+            });
+            setEwayModalOpen(false);
+            await loadInvoice();
+            alert("E-Way Bill generated successfully!");
+        } catch (err) {
+            alert(err.message || "Failed to generate E-Way Bill");
+        } finally {
+            setActionLoading(false);
+        }
+    }
+
+    async function handleCancelEWayBill(ewbId) {
+        const reason = prompt("Enter E-Way Bill cancellation reason (e.g. Order Cancelled, Data Error):", "Order Cancelled");
+        if (!reason) return;
+        try {
+            setActionLoading(true);
+            await cancelEWayBill(invoice.id, ewbId, "1", reason);
+            await loadInvoice();
+            alert("E-Way Bill cancelled successfully.");
+        } catch (err) {
+            alert(err.message || "Failed to cancel E-Way Bill");
+        } finally {
+            setActionLoading(false);
+        }
+    }
+
+    async function handleDownloadReceipt(payment) {
+        try {
+            const blob = await downloadPaymentReceiptPdf(payment.id);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Receipt-${payment.receiptNumber || payment.id}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            alert("Error downloading receipt PDF: " + err.message);
         }
     }
 
@@ -300,6 +413,44 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
                             </svg>
                             Remind Customer
+                        </button>
+                    )}
+
+                    {/* E-Invoice Statutory Action */}
+                    {invoice.status !== "DRAFT" && invoice.status !== "CANCELLED" && (
+                        invoice.irn ? (
+                            <button
+                                type="button"
+                                className="action-btn-sm"
+                                style={{ background: "rgba(239, 68, 68, 0.12)", color: "#b91c1c", border: "1px solid rgba(239, 68, 68, 0.3)" }}
+                                onClick={() => setEInvoiceCancelModalOpen(true)}
+                                disabled={actionLoading}
+                            >
+                                ✕ Cancel IRN
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                className="action-btn-sm"
+                                style={{ background: "rgba(14, 165, 233, 0.12)", color: "#0284c7", border: "1px solid rgba(14, 165, 233, 0.3)" }}
+                                onClick={handleGenerateEInvoice}
+                                disabled={actionLoading}
+                            >
+                                ⚡ E-Invoice (IRN)
+                            </button>
+                        )
+                    )}
+
+                    {/* E-Way Bill Action */}
+                    {invoice.status !== "DRAFT" && invoice.status !== "CANCELLED" && (
+                        <button
+                            type="button"
+                            className="action-btn-sm"
+                            style={{ background: "rgba(245, 158, 11, 0.12)", color: "#b45309", border: "1px solid rgba(245, 158, 11, 0.3)" }}
+                            onClick={() => setEwayModalOpen(true)}
+                            disabled={actionLoading}
+                        >
+                            🚚 E-Way Bill
                         </button>
                     )}
 
@@ -506,6 +657,133 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                 </div>
             </div>
 
+            {/* STATUTORY E-INVOICE CARD */}
+            {invoice.irn && (
+                <div className="card" style={{ padding: "16px 20px", marginTop: "16px", borderLeft: "4px solid #10b981", background: "#f0fdf4" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
+                        <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                                <span className="badge" style={{ background: "#10b981", color: "#fff", fontWeight: "700" }}>
+                                    ✓ STATUTORY E-INVOICE (IRN)
+                                </span>
+                                <span style={{ fontSize: "12px", color: "#065f46" }}>Status: {invoice.einvoiceStatus || "GENERATED"}</span>
+                            </div>
+                            <div style={{ fontSize: "12px", fontFamily: "monospace", color: "#047857", wordBreak: "break-all", marginBottom: "4px" }}>
+                                <strong>IRN:</strong> {invoice.irn}
+                            </div>
+                            <div style={{ display: "flex", gap: "16px", fontSize: "12px", color: "#065f46" }}>
+                                <span><strong>Ack No:</strong> {invoice.ackNo || "N/A"}</span>
+                                <span><strong>Ack Date:</strong> {invoice.ackDate || "N/A"}</span>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                                navigator.clipboard.writeText(invoice.irn);
+                                alert("IRN copied to clipboard!");
+                            }}
+                        >
+                            📋 Copy IRN
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* E-WAY BILLS LIST */}
+            {ewayBills && ewayBills.length > 0 && (
+                <div className="card" style={{ padding: "16px 20px", marginTop: "16px", borderLeft: "4px solid #f59e0b" }}>
+                    <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                        🚚 E-Way Bills
+                    </h3>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                        {ewayBills.map(ewb => (
+                            <div key={ewb.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", background: "#fffbeb", padding: "10px 14px", borderRadius: "6px" }}>
+                                <div>
+                                    <div style={{ fontWeight: "700", fontFamily: "monospace", fontSize: "13px", color: "#92400e" }}>
+                                        EWB #{ewb.ewbNumber}
+                                    </div>
+                                    <div style={{ fontSize: "12px", color: "#b45309", display: "flex", gap: "16px", marginTop: "2px" }}>
+                                        <span>Date: {ewb.ewbDate}</span>
+                                        <span>Valid Upto: {ewb.validUpto}</span>
+                                        <span>Distance: {ewb.distanceKm} km</span>
+                                        {ewb.vehicleNumber && <span>Vehicle: {ewb.vehicleNumber}</span>}
+                                    </div>
+                                </div>
+                                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                                    <span className="badge" style={{ background: ewb.status === "ACTIVE" ? "#10b981" : "#ef4444", color: "#fff" }}>
+                                        {ewb.status}
+                                    </span>
+                                    {ewb.status === "ACTIVE" && (
+                                        <button
+                                            type="button"
+                                            className="btn btn-danger btn-sm"
+                                            onClick={() => handleCancelEWayBill(ewb.id)}
+                                            style={{ padding: "4px 8px", fontSize: "11px" }}
+                                        >
+                                            Cancel
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* PAYMENT RECEIPTS & SETTLEMENT HISTORY */}
+            {payments && payments.length > 0 && (
+                <div className="card" style={{ padding: "16px 20px", marginTop: "16px", borderLeft: "4px solid #6366f1" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                        <h3 style={{ margin: 0, fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                            💳 Payment Receipts & Settlement History
+                        </h3>
+                        <span style={{ fontSize: "12px", color: "var(--muted)" }}>Total Paid: {formatCurrency(paid)}</span>
+                    </div>
+                    <div style={{ overflowX: "auto" }}>
+                        <table className="table" style={{ width: "100%", margin: 0, fontSize: "13px" }}>
+                            <thead>
+                                <tr>
+                                    <th>Receipt #</th>
+                                    <th>Date</th>
+                                    <th>Method</th>
+                                    <th>Ref / UTR #</th>
+                                    <th style={{ textAlign: "right" }}>Amount</th>
+                                    <th style={{ textAlign: "center" }}>Receipt PDF</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {payments.map(p => (
+                                    <tr key={p.id}>
+                                        <td>
+                                            <span className="badge" style={{ fontFamily: "monospace", fontSize: "11px", background: "rgba(99, 102, 241, 0.12)", color: "#4f46e5" }}>
+                                                {p.receiptNumber || ("RCP-" + p.id)}
+                                            </span>
+                                        </td>
+                                        <td>{p.paymentDate}</td>
+                                        <td>{p.paymentMethod}</td>
+                                        <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{p.referenceNumber || "-"}</td>
+                                        <td style={{ textAlign: "right", fontWeight: "700", color: "#10b981" }}>
+                                            {formatCurrency(p.amount)}
+                                        </td>
+                                        <td style={{ textAlign: "center" }}>
+                                            <button
+                                                type="button"
+                                                className="btn btn-secondary btn-sm"
+                                                onClick={() => handleDownloadReceipt(p)}
+                                                style={{ padding: "4px 8px", fontSize: "11px" }}
+                                            >
+                                                📄 Download Receipt
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {/* QUICK PAYMENT MODAL */}
             {payModalOpen && (
                 <div className="modal-backdrop" onClick={() => setPayModalOpen(false)}>
@@ -546,17 +824,21 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                             </div>
 
                             <div className="form-group">
-                                <label className="form-label">Payment Mode <span style={{ color: "var(--danger)" }}>*</span></label>
+                                <label className="form-label">Payment Method <span style={{ color: "var(--danger)" }}>*</span></label>
                                 <select
                                     className="form-control"
                                     value={payMethod}
                                     onChange={e => setPayMethod(e.target.value)}
                                 >
                                     <option value="UPI">UPI / QR Code</option>
-                                    <option value="BANK_TRANSFER">Bank Transfer (NEFT/RTGS/IMPS)</option>
+                                    <option value="NEFT">NEFT (Bank Transfer)</option>
+                                    <option value="RTGS">RTGS (High Value)</option>
+                                    <option value="IMPS">IMPS (Instant)</option>
                                     <option value="CASH">Cash</option>
-                                    <option value="CHEQUE">Cheque</option>
                                     <option value="CARD">Credit / Debit Card</option>
+                                    <option value="CHEQUE">Cheque</option>
+                                    <option value="NETBANKING">Net Banking</option>
+                                    <option value="OTHER">Other</option>
                                 </select>
                             </div>
 
@@ -698,6 +980,110 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* E-INVOICE CANCELLATION MODAL */}
+            {eInvoiceCancelModalOpen && (
+                <div className="modal-backdrop" onClick={() => setEInvoiceCancelModalOpen(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: "440px" }}>
+                        <div className="modal-header">
+                            <h2>✕ Cancel Statutory E-Invoice</h2>
+                            <button type="button" className="modal-close-btn" onClick={() => setEInvoiceCancelModalOpen(false)}>✕</button>
+                        </div>
+                        <form onSubmit={handleCancelEInvoice} className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>
+                                Statutory IRN cancellation transmits directly to the IRP portal. Note: Once cancelled, an IRN cannot be re-generated for this invoice number.
+                            </p>
+                            <div className="form-group">
+                                <label className="form-label">Cancellation Reason Code <span style={{ color: "var(--danger)" }}>*</span></label>
+                                <select
+                                    className="form-control"
+                                    value={cancelReason}
+                                    onChange={e => setCancelReason(e.target.value)}
+                                >
+                                    <option value="1">1 - Duplicate Invoice</option>
+                                    <option value="2">2 - Data Entry Error</option>
+                                    <option value="3">3 - Order Cancelled</option>
+                                    <option value="4">4 - Others</option>
+                                </select>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Remarks <span style={{ color: "var(--danger)" }}>*</span></label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    required
+                                    value={cancelRemarks}
+                                    onChange={e => setCancelRemarks(e.target.value)}
+                                    placeholder="Brief reason for cancellation"
+                                />
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
+                                <button type="button" className="secondary-button" onClick={() => setEInvoiceCancelModalOpen(false)}>
+                                    Dismiss
+                                </button>
+                                <button type="submit" className="danger-button" disabled={actionLoading}>
+                                    {actionLoading ? "Cancelling..." : "Confirm IRN Cancellation"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* E-WAY BILL GENERATION MODAL */}
+            {ewayModalOpen && (
+                <div className="modal-backdrop" onClick={() => setEwayModalOpen(false)}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: "460px" }}>
+                        <div className="modal-header">
+                            <h2>🚚 Generate Statutory E-Way Bill</h2>
+                            <button type="button" className="modal-close-btn" onClick={() => setEwayModalOpen(false)}>✕</button>
+                        </div>
+                        <form onSubmit={handleGenerateEWayBill} className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div className="form-group">
+                                <label className="form-label">Approx Distance (in KM) <span style={{ color: "var(--danger)" }}>*</span></label>
+                                <input
+                                    type="number"
+                                    className="form-control"
+                                    required
+                                    min="1"
+                                    value={ewbDistance}
+                                    onChange={e => setEwbDistance(e.target.value)}
+                                    placeholder="e.g. 150"
+                                />
+                                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Validity is calculated at 200 km/day as per GST rules.</span>
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Vehicle Registration Number</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    value={ewbVehicleNumber}
+                                    onChange={e => setEwbVehicleNumber(e.target.value)}
+                                    placeholder="e.g. MH12AB1234 or DL01XY9876"
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Transporter ID / GSTIN</label>
+                                <input
+                                    type="text"
+                                    className="form-control"
+                                    value={ewbTransporterId}
+                                    onChange={e => setEwbTransporterId(e.target.value)}
+                                    placeholder="15-digit Transporter GSTIN (Optional)"
+                                />
+                            </div>
+                            <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end", marginTop: "8px" }}>
+                                <button type="button" className="secondary-button" onClick={() => setEwayModalOpen(false)}>
+                                    Cancel
+                                </button>
+                                <button type="submit" className="primary-button" disabled={actionLoading}>
+                                    {actionLoading ? "Generating..." : "Generate E-Way Bill"}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

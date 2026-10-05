@@ -142,6 +142,41 @@
     align-items: center;
 }
 
+.landing-hero-image-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    max-width: 620px;
+    margin: 0 auto;
+}
+
+.laptop-glow-effect {
+    position: absolute;
+    inset: -15px;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.22) 0%, rgba(124, 58, 237, 0.12) 50%, transparent 75%);
+    filter: blur(45px);
+    z-index: 1;
+    pointer-events: none;
+}
+
+.landing-hero-laptop-image {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: auto;
+    object-fit: contain;
+    border-radius: 12px;
+    filter: drop-shadow(0 20px 35px rgba(15, 23, 42, 0.12));
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), filter 0.4s ease;
+}
+
+.landing-hero-laptop-image:hover {
+    transform: translateY(-5px) scale(1.015);
+    filter: drop-shadow(0 28px 40px rgba(37, 99, 235, 0.22));
+}
+
 .landing-badge-pill {
     display: inline-flex;
     align-items: center;

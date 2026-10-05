@@ -40,6 +40,25 @@ class GstCalculationServiceTest {
     }
 
     @Test
+    @DisplayName("Intra-state transaction using state codes (e.g. 27 and Maharashtra) is recognized correctly")
+    void testIntraStateGstWithStateCodes() {
+        GstCalculationService.ItemInput item = new GstCalculationService.ItemInput(
+                1L, "Widget", "8471", BigDecimal.valueOf(1), BigDecimal.valueOf(1000),
+                BigDecimal.valueOf(18), BigDecimal.ZERO, false
+        );
+
+        // Supplier has code "27", Customer has name "Maharashtra"
+        GstCalculationService.GstResult result = service.calculate(
+                "27", "Maharashtra", false, BigDecimal.ZERO, List.of(item)
+        );
+
+        assertTrue(result.intraState());
+        assertEquals(0, new BigDecimal("90.00").compareTo(result.cgst()));
+        assertEquals(0, new BigDecimal("90.00").compareTo(result.sgst()));
+        assertEquals(0, BigDecimal.ZERO.compareTo(result.igst()));
+    }
+
+    @Test
     @DisplayName("Inter-state transaction applies 100% IGST with zero CGST and SGST")
     void testInterStateGst() {
         GstCalculationService.ItemInput item = new GstCalculationService.ItemInput(
@@ -115,10 +134,85 @@ class GstCalculationServiceTest {
                 "Punjab", "Punjab", false, BigDecimal.valueOf(50), List.of(item) // ₹50 invoice discount
         );
 
-        // Gross: 1000 - 100 item discount = 900 taxable from item
-        // Less invoice discount 50 = 850 taxable
-        // Tax on item: 900 * 18% = 162
         assertNotNull(result.amountInWords());
         assertTrue(result.amountInWords().contains("Rupees"));
+    }
+
+    @Test
+    @DisplayName("Reverse Charge Mechanism (RCM): Tax calculated but grandTotal equals taxableAmount")
+    void testReverseChargeMechanism() {
+        GstCalculationService.ItemInput item = new GstCalculationService.ItemInput(
+                1L, "Legal Consulting", "9982", BigDecimal.ONE, BigDecimal.valueOf(50000),
+                BigDecimal.valueOf(18), BigDecimal.ZERO, false
+        );
+
+        // isExport = false, reverseCharge = true
+        GstCalculationService.GstResult result = service.calculate(
+                "Maharashtra", "Maharashtra", false, true, BigDecimal.ZERO, List.of(item)
+        );
+
+        assertTrue(result.reverseCharge());
+        assertEquals(0, new BigDecimal("50000.00").compareTo(result.taxableAmount()));
+        assertEquals(0, new BigDecimal("4500.00").compareTo(result.cgst()));
+        assertEquals(0, new BigDecimal("4500.00").compareTo(result.sgst()));
+        assertEquals(0, new BigDecimal("9000.00").compareTo(result.totalTax()));
+        // Payable to supplier is ONLY taxable amount under RCM
+        assertEquals(0, new BigDecimal("50000.00").compareTo(result.grandTotal()));
+    }
+
+    @Test
+    @DisplayName("Round-off adjustment accurately computes nearest integer rupee")
+    void testRoundOffAdjustment() {
+        // Line total that results in fractional paise
+        GstCalculationService.ItemInput item = new GstCalculationService.ItemInput(
+                1L, "Odd Item", "8471", BigDecimal.valueOf(1), BigDecimal.valueOf(100.35),
+                BigDecimal.valueOf(18), BigDecimal.ZERO, false
+        );
+
+        GstCalculationService.GstResult result = service.calculate(
+                "Karnataka", "Karnataka", false, false, BigDecimal.ZERO, List.of(item)
+        );
+
+        // Taxable 100.35 + 18% tax 18.06 = 118.41
+        // Rounded grand total = 118.00 -> round-off = -0.41
+        assertEquals(0, new BigDecimal("118.41").compareTo(result.grandTotal()));
+        assertEquals(0, new BigDecimal("-0.41").compareTo(result.roundOffAmount()));
+    }
+
+    @Test
+    @DisplayName("Input validation rejects invalid item quantities, prices, or rates")
+    void testInputValidationRejections() {
+        // Zero or negative quantity
+        assertThrows(IllegalArgumentException.class, () ->
+                service.calculate("Delhi", "Delhi", false, BigDecimal.ZERO, List.of(
+                        new GstCalculationService.ItemInput(1L, "A", "1234", BigDecimal.ZERO, BigDecimal.TEN, BigDecimal.valueOf(18), BigDecimal.ZERO, false)
+                ))
+        );
+
+        // Negative unit price
+        assertThrows(IllegalArgumentException.class, () ->
+                service.calculate("Delhi", "Delhi", false, BigDecimal.ZERO, List.of(
+                        new GstCalculationService.ItemInput(1L, "A", "1234", BigDecimal.ONE, BigDecimal.valueOf(-10), BigDecimal.valueOf(18), BigDecimal.ZERO, false)
+                ))
+        );
+
+        // Negative GST rate
+        assertThrows(IllegalArgumentException.class, () ->
+                service.calculate("Delhi", "Delhi", false, BigDecimal.ZERO, List.of(
+                        new GstCalculationService.ItemInput(1L, "A", "1234", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.valueOf(-5), BigDecimal.ZERO, false)
+                ))
+        );
+
+        // Negative discount
+        assertThrows(IllegalArgumentException.class, () ->
+                service.calculate("Delhi", "Delhi", false, BigDecimal.ZERO, List.of(
+                        new GstCalculationService.ItemInput(1L, "A", "1234", BigDecimal.ONE, BigDecimal.TEN, BigDecimal.valueOf(18), BigDecimal.valueOf(-20), false)
+                ))
+        );
+
+        // Empty items list
+        assertThrows(IllegalArgumentException.class, () ->
+                service.calculate("Delhi", "Delhi", false, BigDecimal.ZERO, List.of())
+        );
     }
 }

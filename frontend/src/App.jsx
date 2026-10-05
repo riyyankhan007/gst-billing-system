@@ -143,7 +143,14 @@ function App() {
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("ALL");
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        return localStorage.getItem("gst_sidebar_collapsed") === "true";
+    });
     const [authView, setAuthView] = useState("landing"); // "landing" | "login" | "register"
+
+    useEffect(() => {
+        localStorage.setItem("gst_sidebar_collapsed", sidebarCollapsed ? "true" : "false");
+    }, [sidebarCollapsed]);
 
     // Listen to token expiration events
     useEffect(() => {
@@ -220,6 +227,7 @@ function App() {
             type="button"
             className={`sidebar-link ${page === target ? "active" : ""}`}
             onClick={() => navigate(target)}
+            title={label}
         >
             <Icon type={icon} />
             <span>{label}</span>
@@ -271,7 +279,7 @@ function App() {
     };
 
     return (
-        <div className="app-shell">
+        <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
             {/* Mobile Header Bar */}
             <header className="mobile-topbar">
                 <button
@@ -389,6 +397,29 @@ function App() {
                 {/* Desktop Topbar */}
                 <header className="topbar">
                     <div className="topbar-left">
+                        <button
+                            type="button"
+                            className="sidebar-toggle-btn"
+                            onClick={() => setSidebarCollapsed(prev => !prev)}
+                            title={sidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+                            aria-label="Toggle Sidebar"
+                        >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                {sidebarCollapsed ? (
+                                    <>
+                                        <line x1="3" y1="12" x2="21" y2="12" />
+                                        <line x1="3" y1="6" x2="21" y2="6" />
+                                        <line x1="3" y1="18" x2="21" y2="18" />
+                                    </>
+                                ) : (
+                                    <>
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                                        <line x1="9" y1="3" x2="9" y2="21" />
+                                        <path d="M15 10l-2 2 2 2" />
+                                    </>
+                                )}
+                            </svg>
+                        </button>
                         <span style={{ fontWeight: 600 }}>GST Billing & SaaS ERP</span>
                         {profile?.businessName && (
                             <span className="topbar-badge">{profile.businessName}</span>

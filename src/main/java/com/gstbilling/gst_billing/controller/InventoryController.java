@@ -2,6 +2,7 @@ package com.gstbilling.gst_billing.controller;
 
 import com.gstbilling.gst_billing.entity.StockMovement;
 import com.gstbilling.gst_billing.service.InventoryService;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -19,16 +20,19 @@ public class InventoryController {
     }
 
     @GetMapping("/movements")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES', 'VIEWER', 'SUPPORT')")
     public List<StockMovement> getAllMovements() {
         return inventoryService.getAllMovements();
     }
 
     @GetMapping("/product/{productId}/movements")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES', 'VIEWER', 'SUPPORT')")
     public List<StockMovement> getMovementsForProduct(@PathVariable Long productId) {
         return inventoryService.getMovementsForProduct(productId);
     }
 
     @PostMapping("/adjust")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT')")
     public StockMovement adjustStock(@RequestBody Map<String, Object> body) {
         Long productId = Long.valueOf(body.get("productId").toString());
         BigDecimal quantity = new BigDecimal(body.get("quantity").toString());

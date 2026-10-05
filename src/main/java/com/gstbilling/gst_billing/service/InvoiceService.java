@@ -26,6 +26,8 @@ public class InvoiceService {
     private final CurrentUserService currentUserService;
     private final GstCalculationService gstCalculationService;
     private final EmailService emailService;
+    private final AuditLogService auditLogService;
+    private final InvoiceSequenceService invoiceSequenceService;
 
     public InvoiceService(
             InvoiceRepository invoiceRepository,
@@ -35,7 +37,9 @@ public class InvoiceService {
             StockMovementRepository stockMovementRepository,
             CurrentUserService currentUserService,
             GstCalculationService gstCalculationService,
-            EmailService emailService
+            EmailService emailService,
+            AuditLogService auditLogService,
+            InvoiceSequenceService invoiceSequenceService
     ) {
         this.invoiceRepository = invoiceRepository;
         this.productRepository = productRepository;
@@ -45,34 +49,34 @@ public class InvoiceService {
         this.currentUserService = currentUserService;
         this.gstCalculationService = gstCalculationService;
         this.emailService = emailService;
+        this.auditLogService = auditLogService;
+        this.invoiceSequenceService = invoiceSequenceService;
     }
 
     @Transactional
     public Invoice createInvoice(Invoice invoice) {
         Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
 
-        // Lock business to generate concurrency-safe per-business invoice number
+        // Lock business to ensure consistent state
         Business business = businessRepository.findByIdForUpdate(businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Business not found"));
 
-        // Generate per-business sequential invoice number
-        String prefix = (business.getInvoicePrefix() != null && !business.getInvoicePrefix().isBlank())
-                ? business.getInvoicePrefix().trim() : "INV";
-        String fy = (business.getFinancialYear() != null && !business.getFinancialYear().isBlank())
-                ? business.getFinancialYear().trim() : "2026-27";
-        long seq = (business.getInvoiceSeqNumber() != null && business.getInvoiceSeqNumber() > 0)
-                ? business.getInvoiceSeqNumber() : 1L;
+        LocalDate invoiceDate = invoice.getInvoiceDate() != null ? invoice.getInvoiceDate() : LocalDate.now();
+        invoice.setInvoiceDate(invoiceDate);
+        String fy = com.gstbilling.gst_billing.util.FinancialYearUtil.getFinancialYear(invoiceDate);
+        invoice.setFinancialYear(fy);
 
-        String invoiceNumber = String.format("%s/%s/%03d", prefix, fy, seq);
-        while (invoiceRepository.existsByBusiness_IdAndInvoiceNumberIgnoreCase(businessId, invoiceNumber)) {
-            seq++;
-            invoiceNumber = String.format("%s/%s/%03d", prefix, fy, seq);
+        if (invoice.getInvoiceNumber() != null && !invoice.getInvoiceNumber().isBlank()) {
+            String customNumber = invoice.getInvoiceNumber().trim();
+            if (invoiceRepository.existsByBusiness_IdAndInvoiceNumberIgnoreCase(businessId, customNumber)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "Invoice number already exists: " + customNumber);
+            }
+            invoice.setInvoiceNumber(customNumber);
+        } else {
+            String generatedNumber = invoiceSequenceService.generateNextInvoiceNumber(business, invoiceDate);
+            invoice.setInvoiceNumber(generatedNumber);
         }
 
-        business.setInvoiceSeqNumber(seq + 1);
-        businessRepository.save(business);
-
-        invoice.setInvoiceNumber(invoiceNumber);
         invoice.setBusiness(business);
 
         // Fetch and validate customer
@@ -117,7 +121,9 @@ public class InvoiceService {
             invoice.setStatus("DRAFT");
         }
 
-        return invoiceRepository.save(invoice);
+        Invoice saved = invoiceRepository.save(invoice);
+        auditLogService.logAction("CREATE_INVOICE", "INVOICE", saved.getId(), "Invoice created: " + saved.getInvoiceNumber());
+        return saved;
     }
 
     private void calculateAndPopulateInvoice(Invoice invoice, Business business, Customer customer) {
@@ -188,10 +194,13 @@ public class InvoiceService {
             ));
         }
 
+        boolean reverseCharge = Boolean.TRUE.equals(invoice.getReverseCharge());
+
         GstCalculationService.GstResult calcResult = gstCalculationService.calculate(
                 invoice.getSupplierState(),
                 invoice.getCustomerState(),
                 isExport,
+                reverseCharge,
                 invoice.getDiscountAmount(),
                 itemInputs
         );
@@ -212,6 +221,7 @@ public class InvoiceService {
         invoice.setIgst(calcResult.igst());
         invoice.setTotalTax(calcResult.totalTax());
         invoice.setGrandTotal(calcResult.grandTotal());
+        invoice.setRoundOffAmount(calcResult.roundOffAmount());
         invoice.setAmountInWords(calcResult.amountInWords());
 
         BigDecimal paid = invoice.getPaidAmount() != null ? invoice.getPaidAmount() : BigDecimal.ZERO;
@@ -293,7 +303,9 @@ public class InvoiceService {
         invoice.setUpdatedAt(LocalDateTime.now());
         applyStockReduction(invoice, invoice.getBusiness());
 
-        return invoiceRepository.save(invoice);
+        Invoice saved = invoiceRepository.save(invoice);
+        auditLogService.logAction("ISSUE_INVOICE", "INVOICE", saved.getId(), "Invoice issued: " + saved.getInvoiceNumber());
+        return saved;
     }
 
     @Transactional
@@ -351,7 +363,9 @@ public class InvoiceService {
         calculateAndPopulateInvoice(existing, business, existing.getCustomer());
         existing.setUpdatedAt(LocalDateTime.now());
 
-        return invoiceRepository.save(existing);
+        Invoice saved = invoiceRepository.save(existing);
+        auditLogService.logAction("UPDATE_INVOICE", "INVOICE", saved.getId(), "Draft invoice updated: " + saved.getInvoiceNumber());
+        return saved;
     }
 
     @Transactional(readOnly = true)
@@ -398,6 +412,11 @@ public class InvoiceService {
 
     @Transactional
     public Invoice cancelInvoice(Long id) {
+        return cancelInvoice(id, "Cancelled by user");
+    }
+
+    @Transactional
+    public Invoice cancelInvoice(Long id, String reason) {
         Invoice invoice = getInvoiceById(id);
 
         if ("CANCELLED".equalsIgnoreCase(invoice.getStatus())) {
@@ -417,19 +436,33 @@ public class InvoiceService {
             reverseStockReduction(invoice, invoice.getBusiness());
         }
 
+        String cancellationReason = (reason != null && !reason.isBlank()) ? reason.trim() : "Cancelled by user";
         invoice.setStatus("CANCELLED");
+        invoice.setCancellationReason(cancellationReason);
+        invoice.setCancelledAt(LocalDateTime.now());
+        try {
+            invoice.setCancelledBy(currentUserService.getCurrentUser().getEmail());
+        } catch (Exception ignored) {
+            invoice.setCancelledBy("SYSTEM");
+        }
         invoice.setUpdatedAt(LocalDateTime.now());
-        return invoiceRepository.save(invoice);
+
+        Invoice saved = invoiceRepository.save(invoice);
+        auditLogService.logAction("CANCEL_INVOICE", "INVOICE", saved.getId(),
+                "Invoice cancelled: " + saved.getInvoiceNumber() + ". Reason: " + cancellationReason);
+        return saved;
     }
 
     @Transactional
     public void deleteInvoice(Long id) {
         Invoice invoice = getInvoiceById(id);
-        if (!"DRAFT".equalsIgnoreCase(invoice.getStatus()) && !"CANCELLED".equalsIgnoreCase(invoice.getStatus())) {
+        if (!"DRAFT".equalsIgnoreCase(invoice.getStatus())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "Only DRAFT or CANCELLED invoices can be deleted.");
+                    "Only DRAFT invoices can be deleted. Finalized and cancelled invoices must be preserved for GST audit compliance.");
         }
+        String invoiceNumber = invoice.getInvoiceNumber();
         invoiceRepository.delete(invoice);
+        auditLogService.logAction("DELETE_INVOICE", "INVOICE", id, "Invoice deleted: " + invoiceNumber);
     }
 
     public ReminderResponse getReminderDetails(Long id) {

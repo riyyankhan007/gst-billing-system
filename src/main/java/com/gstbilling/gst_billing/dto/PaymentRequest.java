@@ -19,5 +19,12 @@ public record PaymentRequest(
         String paymentMethod,
 
         String referenceNumber,
-        String notes
-) {}
+        String notes,
+        String gatewayProvider,
+        String gatewayPaymentId,
+        String gatewayOrderId
+) {
+    public PaymentRequest(Long invoiceId, BigDecimal amount, LocalDate paymentDate, String paymentMethod, String referenceNumber, String notes) {
+        this(invoiceId, amount, paymentDate, paymentMethod, referenceNumber, notes, null, null, null);
+    }
+}

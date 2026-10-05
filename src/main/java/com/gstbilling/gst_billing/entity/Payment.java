@@ -9,7 +9,9 @@ import java.time.LocalDateTime;
 @Table(name = "payment", indexes = {
         @Index(name = "idx_payment_business", columnList = "business_id"),
         @Index(name = "idx_payment_invoice", columnList = "invoice_id"),
-        @Index(name = "idx_payment_customer", columnList = "customer_id")
+        @Index(name = "idx_payment_customer", columnList = "customer_id"),
+        @Index(name = "idx_payment_receipt_no", columnList = "receipt_number"),
+        @Index(name = "idx_payment_gateway_id", columnList = "gateway_payment_id")
 })
 public class Payment {
 
@@ -36,7 +38,7 @@ public class Payment {
     private LocalDate paymentDate;
 
     @Column(name = "payment_method", nullable = false)
-    private String paymentMethod; // Cash, UPI, Bank Transfer, Card, Cheque, Other
+    private String paymentMethod; // CASH, UPI, NEFT, RTGS, IMPS, CARD, CHEQUE, NETBANKING, OTHER
 
     @Column(name = "reference_number")
     private String referenceNumber;
@@ -47,11 +49,30 @@ public class Payment {
     @Column(name = "created_by")
     private String createdBy;
 
+    @Column(name = "receipt_number")
+    private String receiptNumber;
+
+    @Column(name = "gateway_provider")
+    private String gatewayProvider; // MANUAL, RAZORPAY, CASHFREE
+
+    @Column(name = "gateway_payment_id")
+    private String gatewayPaymentId;
+
+    @Column(name = "gateway_order_id")
+    private String gatewayOrderId;
+
+    @Column(name = "gateway_signature")
+    private String gatewaySignature;
+
+    @Column(name = "status")
+    private String status = "SUCCESS"; // SUCCESS, PENDING, FAILED, REFUNDED
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
     public Payment() {
         this.createdAt = LocalDateTime.now();
+        this.status = "SUCCESS";
     }
 
     public Payment(Business business, Invoice invoice, Customer customer, BigDecimal amount,
@@ -65,6 +86,7 @@ public class Payment {
         this.referenceNumber = referenceNumber;
         this.notes = notes;
         this.createdBy = createdBy;
+        this.status = "SUCCESS";
         this.createdAt = LocalDateTime.now();
     }
 
@@ -146,6 +168,54 @@ public class Payment {
 
     public void setCreatedBy(String createdBy) {
         this.createdBy = createdBy;
+    }
+
+    public String getReceiptNumber() {
+        return receiptNumber;
+    }
+
+    public void setReceiptNumber(String receiptNumber) {
+        this.receiptNumber = receiptNumber;
+    }
+
+    public String getGatewayProvider() {
+        return gatewayProvider;
+    }
+
+    public void setGatewayProvider(String gatewayProvider) {
+        this.gatewayProvider = gatewayProvider;
+    }
+
+    public String getGatewayPaymentId() {
+        return gatewayPaymentId;
+    }
+
+    public void setGatewayPaymentId(String gatewayPaymentId) {
+        this.gatewayPaymentId = gatewayPaymentId;
+    }
+
+    public String getGatewayOrderId() {
+        return gatewayOrderId;
+    }
+
+    public void setGatewayOrderId(String gatewayOrderId) {
+        this.gatewayOrderId = gatewayOrderId;
+    }
+
+    public String getGatewaySignature() {
+        return gatewaySignature;
+    }
+
+    public void setGatewaySignature(String gatewaySignature) {
+        this.gatewaySignature = gatewaySignature;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
 
     public LocalDateTime getCreatedAt() {

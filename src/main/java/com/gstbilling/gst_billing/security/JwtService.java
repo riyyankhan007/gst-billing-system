@@ -12,25 +12,59 @@ import java.util.Date;
 public class JwtService {
     private final SecretKey key;
     private final long expirationMs;
+
     public JwtService(@Value("${app.jwt.secret}") String secret, @Value("${app.jwt.expiration-ms}") long expirationMs) {
-        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)); this.expirationMs = expirationMs;
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.expirationMs = expirationMs;
     }
+
     public String generateToken(String email, Long userId) {
-        return generateToken(email, userId, "ADMIN");
+        return generateToken(email, userId, null, "OWNER");
     }
+
     public String generateToken(String email, Long userId, String role) {
-        return Jwts.builder()
+        return generateToken(email, userId, null, role);
+    }
+
+    public String generateToken(String email, Long userId, Long tenantId, String role) {
+        var builder = Jwts.builder()
                 .subject(email)
                 .claim("userId", userId)
-                .claim("role", role != null ? role : "ADMIN")
+                .claim("role", (role != null && !role.isBlank()) ? role.toUpperCase() : "OWNER");
+
+        if (tenantId != null) {
+            builder.claim("tenantId", tenantId);
+        }
+
+        return builder
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(key)
                 .compact();
     }
-    public String extractEmail(String token) { return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().getSubject(); }
+
+    public String extractEmail(String token) {
+        return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().getSubject();
+    }
+
     public String extractRole(String token) {
         Object role = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().get("role");
-        return role != null ? role.toString() : "ADMIN";
+        return (role != null && !role.toString().isBlank()) ? role.toString().toUpperCase() : "VIEWER";
+    }
+
+    public Long extractUserId(String token) {
+        Object userId = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().get("userId");
+        if (userId instanceof Number num) {
+            return num.longValue();
+        }
+        return null;
+    }
+
+    public Long extractTenantId(String token) {
+        Object tenantId = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload().get("tenantId");
+        if (tenantId instanceof Number num) {
+            return num.longValue();
+        }
+        return null;
     }
 }

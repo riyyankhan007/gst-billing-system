@@ -6,7 +6,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "audit_log", indexes = {
         @Index(name = "idx_audit_business", columnList = "business_id"),
-        @Index(name = "idx_audit_created_at", columnList = "created_at")
+        @Index(name = "idx_audit_created_at", columnList = "created_at"),
+        @Index(name = "idx_audit_correlation", columnList = "correlation_id")
 })
 public class AuditLog {
 
@@ -17,6 +18,9 @@ public class AuditLog {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "business_id", nullable = false)
     private Business business;
+
+    @Column(name = "actor_user_id")
+    private Long actorUserId;
 
     @Column(name = "user_email")
     private String userEmail;
@@ -33,6 +37,15 @@ public class AuditLog {
     @Column(name = "details", columnDefinition = "TEXT")
     private String details;
 
+    @Column(name = "correlation_id")
+    private String correlationId;
+
+    @Column(name = "ip_address")
+    private String ipAddress;
+
+    @Column(name = "user_agent")
+    private String userAgent;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -41,12 +54,21 @@ public class AuditLog {
     }
 
     public AuditLog(Business business, String userEmail, String action, String entityType, Long entityId, String details) {
+        this(business, null, userEmail, action, entityType, entityId, details, null, null, null);
+    }
+
+    public AuditLog(Business business, Long actorUserId, String userEmail, String action, String entityType, Long entityId,
+                    String details, String correlationId, String ipAddress, String userAgent) {
         this.business = business;
+        this.actorUserId = actorUserId;
         this.userEmail = userEmail;
         this.action = action;
         this.entityType = entityType;
         this.entityId = entityId;
         this.details = details;
+        this.correlationId = correlationId;
+        this.ipAddress = ipAddress;
+        this.userAgent = userAgent;
         this.createdAt = LocalDateTime.now();
     }
 
@@ -64,6 +86,14 @@ public class AuditLog {
 
     public void setBusiness(Business business) {
         this.business = business;
+    }
+
+    public Long getActorUserId() {
+        return actorUserId;
+    }
+
+    public void setActorUserId(Long actorUserId) {
+        this.actorUserId = actorUserId;
     }
 
     public String getUserEmail() {
@@ -104,6 +134,30 @@ public class AuditLog {
 
     public void setDetails(String details) {
         this.details = details;
+    }
+
+    public String getCorrelationId() {
+        return correlationId;
+    }
+
+    public void setCorrelationId(String correlationId) {
+        this.correlationId = correlationId;
+    }
+
+    public String getIpAddress() {
+        return ipAddress;
+    }
+
+    public void setIpAddress(String ipAddress) {
+        this.ipAddress = ipAddress;
+    }
+
+    public String getUserAgent() {
+        return userAgent;
+    }
+
+    public void setUserAgent(String userAgent) {
+        this.userAgent = userAgent;
     }
 
     public LocalDateTime getCreatedAt() {

@@ -24,13 +24,34 @@ import java.nio.file.Path;
 public class InvoicePdfService {
 
     private final InvoiceService invoiceService;
+    private final com.gstbilling.gst_billing.storage.StorageService storageService;
 
-    public InvoicePdfService(InvoiceService invoiceService) {
+    public InvoicePdfService(
+            InvoiceService invoiceService,
+            com.gstbilling.gst_billing.storage.StorageService storageService
+    ) {
         this.invoiceService = invoiceService;
+        this.storageService = storageService;
     }
 
+    public void invalidateInvoicePdfCache(Long businessId, Long invoiceId) {
+        String cacheKey = "invoices/" + businessId + "/" + invoiceId + ".pdf";
+        storageService.delete(cacheKey);
+    }
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public byte[] generateInvoicePdf(Long invoiceId) {
         Invoice invoice = invoiceService.getInvoiceById(invoiceId);
+        Long businessId = (invoice.getBusiness() != null) ? invoice.getBusiness().getId() : 0L;
+        String cacheKey = "invoices/" + businessId + "/" + invoice.getId() + ".pdf";
+
+        // If finalized and cached, return cached PDF bytes immediately
+        if (!"DRAFT".equalsIgnoreCase(invoice.getStatus()) && storageService.exists(cacheKey)) {
+            byte[] cached = storageService.retrieve(cacheKey);
+            if (cached != null && cached.length > 0) {
+                return cached;
+            }
+        }
 
         try (
                 PDDocument document = new PDDocument();
@@ -46,6 +67,14 @@ public class InvoicePdfService {
 
                 // Header Title
                 write(content, "TAX INVOICE", 18, true, left, y);
+
+                // If IRN is present, display e-invoice header
+                if (invoice.getIrn() != null && !invoice.getIrn().isBlank()) {
+                    write(content, "IRN: " + truncate(invoice.getIrn(), 64), 7, false, left + 130, y + 4);
+                    String ackInfo = "Ack No: " + (invoice.getAckNo() != null ? invoice.getAckNo() : "-") +
+                            (invoice.getAckDate() != null ? " | Dt: " + invoice.getAckDate().toString() : "");
+                    write(content, ackInfo, 7, false, left + 130, y - 5);
+                }
 
                 Business business = invoice.getBusiness();
 
@@ -252,7 +281,13 @@ public class InvoicePdfService {
             }
 
             document.save(output);
-            return output.toByteArray();
+            byte[] pdfBytes = output.toByteArray();
+            if (!"DRAFT".equalsIgnoreCase(invoice.getStatus())) {
+                try {
+                    storageService.store(cacheKey, pdfBytes, "application/pdf");
+                } catch (Exception ignored) {}
+            }
+            return pdfBytes;
         } catch (IOException e) {
             throw new RuntimeException("Failed to generate invoice PDF", e);
         }

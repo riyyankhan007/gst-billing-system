@@ -198,9 +198,10 @@ export const getInvoices = (status = "", customerId = "") => {
     return json(`/invoices${qs}`);
 };
 
-export const createInvoice = body =>
+export const createInvoice = (body, idempotencyKey = null) =>
     json("/invoices", {
         method: "POST",
+        headers: idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : {},
         body: JSON.stringify(body)
     });
 
@@ -248,6 +249,37 @@ export const sendInvoiceReminderEmail = (id, note) =>
     });
 
 // =========================
+// E-INVOICE & E-WAY BILL
+// =========================
+
+export const generateEInvoice = id =>
+    json(`/invoices/${id}/einvoice/generate`, { method: "POST" });
+
+export const cancelEInvoice = (id, reason, remarks) =>
+    json(`/invoices/${id}/einvoice/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ reason, remarks })
+    });
+
+export const getEInvoice = id =>
+    json(`/invoices/${id}/einvoice`);
+
+export const generateEWayBill = (id, body) =>
+    json(`/invoices/${id}/ewaybill/generate`, {
+        method: "POST",
+        body: JSON.stringify(body || {})
+    });
+
+export const cancelEWayBill = (id, ewbId, cancelReason, cancelRemarks) =>
+    json(`/invoices/${id}/ewaybill/${ewbId}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ cancelReason, cancelRemarks })
+    });
+
+export const getEWayBills = id =>
+    json(`/invoices/${id}/ewaybill`);
+
+// =========================
 // PAYMENTS
 // =========================
 
@@ -260,9 +292,10 @@ export const getPaymentsForInvoice = invoiceId =>
 export const getPaymentsForCustomer = customerId =>
     json(`/payments/customer/${customerId}`);
 
-export const recordPayment = body =>
+export const recordPayment = (body, idempotencyKey = null) =>
     json("/payments", {
         method: "POST",
+        headers: idempotencyKey ? { "X-Idempotency-Key": idempotencyKey } : {},
         body: JSON.stringify(body)
     });
 
@@ -270,6 +303,30 @@ export const deletePayment = id =>
     request(`/payments/${id}`, {
         method: "DELETE"
     });
+
+export async function downloadPaymentReceiptPdf(paymentId) {
+    const res = await request(`/payments/${paymentId}/receipt`);
+    return res.blob();
+}
+
+export const reconcileAllPayments = () =>
+    json("/payments/reconcile", { method: "POST" });
+
+export const createPaymentGatewayOrder = body =>
+    json("/payments/order", {
+        method: "POST",
+        body: JSON.stringify(body)
+    });
+
+// =========================
+// SYSTEM HEALTH & METRICS
+// =========================
+
+export const getSystemHealth = () =>
+    json("/health");
+
+export const getSystemMetrics = () =>
+    json("/metrics");
 
 // =========================
 // DASHBOARD
@@ -440,3 +497,16 @@ export const updateUserRole = (id, role) =>
 
 export const getAuditLogs = () =>
     json("/audit-logs");
+
+// =========================
+// DASHBOARD & ANALYTICS
+// =========================
+
+export const getAnalytics = (range = "MONTH", startDate = null, endDate = null) => {
+    const params = new URLSearchParams();
+    if (range) params.append("range", range);
+    if (startDate) params.append("startDate", startDate);
+    if (endDate) params.append("endDate", endDate);
+    const qs = params.toString();
+    return json(`/analytics${qs ? `?${qs}` : ""}`);
+};

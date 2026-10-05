@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import dashboardLaptopImg from "../assets/gst-dashboard-laptop.jpg";
 
 export default function LandingPage({ onLogin, onRegister }) {
     // Interactive live GST calculator on the landing page
@@ -65,7 +66,24 @@ export default function LandingPage({ onLogin, onRegister }) {
 
             {/* HERO SECTION */}
             <section className="landing-hero">
-                <div className="landing-hero-backdrop" />
+                {/* Hero Showcase Graphic: Laptop with GST Pro Dashboard */}
+                <div className="landing-hero-image-wrapper">
+                    <div className="laptop-glow-effect" />
+                    <img
+                        src={dashboardLaptopImg}
+                        alt="GST Pro Software Dashboard on Laptop"
+                        className="landing-hero-laptop-image"
+                    />
+                    <div className="floating-stat-pill stat-1">
+                        <span className="stat-label">Total Revenue</span>
+                        <strong className="stat-val">₹12,45,000</strong>
+                    </div>
+                    <div className="floating-stat-pill stat-2">
+                        <span className="stat-label">Tax Saved (ITC)</span>
+                        <strong className="stat-val" style={{ color: "#10b981" }}>₹1,98,500</strong>
+                    </div>
+                </div>
+
                 <div className="landing-hero-content">
                     <div className="landing-badge-pill">
                         <span className="pulse-dot" />
@@ -116,79 +134,6 @@ export default function LandingPage({ onLogin, onRegister }) {
                             <span className="trust-icon">✓</span>
                             <span>Instant WhatsApp Reminders</span>
                         </div>
-                    </div>
-                </div>
-
-                {/* Interactive Hero Graphic (Live Invoice Simulation) */}
-                <div className="landing-hero-visual">
-                    <div className="preview-card-glow" />
-                    <div className="interactive-invoice-card">
-                        <div className="invoice-card-header">
-                            <div className="invoice-card-badge">LIVE DEMO INVOICE</div>
-                            <span className="status-badge status-issued">● ISSUED</span>
-                        </div>
-
-                        <div className="invoice-card-body">
-                            <div className="invoice-meta-row">
-                                <div>
-                                    <span className="meta-label">INVOICE NO</span>
-                                    <strong className="meta-value">INV-2026-084</strong>
-                                </div>
-                                <div style={{ textAlign: "right" }}>
-                                    <span className="meta-label">CUSTOMER</span>
-                                    <strong className="meta-value">Reliance Retail Pvt Ltd</strong>
-                                </div>
-                            </div>
-
-                            <div className="invoice-line-items">
-                                <div className="line-item">
-                                    <span>Cloud Server Deployment (HSN: 998313)</span>
-                                    <strong>₹45,000.00</strong>
-                                </div>
-                                <div className="line-item">
-                                    <span>ERP Support Annual Contract</span>
-                                    <strong>₹15,000.00</strong>
-                                </div>
-                            </div>
-
-                            <div className="invoice-tax-breakdown">
-                                <div className="tax-row">
-                                    <span>Taxable Turnover</span>
-                                    <span>₹60,000.00</span>
-                                </div>
-                                <div className="tax-row">
-                                    <span>CGST (9.0%)</span>
-                                    <span>₹5,400.00</span>
-                                </div>
-                                <div className="tax-row">
-                                    <span>SGST (9.0%)</span>
-                                    <span>₹5,400.00</span>
-                                </div>
-                                <div className="tax-row total-row">
-                                    <span>Total Payable</span>
-                                    <span className="total-highlight">₹70,800.00</span>
-                                </div>
-                            </div>
-
-                            {/* WhatsApp reminder trigger illustration */}
-                            <div className="whatsapp-action-pill">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                                </svg>
-                                <span>WhatsApp Reminder Dispatched to +91 98765 43210</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Floating Metrics Pill */}
-                    <div className="floating-stat-pill stat-1">
-                        <span className="stat-label">Total Collections</span>
-                        <strong className="stat-val">₹10,50,200</strong>
-                    </div>
-
-                    <div className="floating-stat-pill stat-2">
-                        <span className="stat-label">Tax Saved (ITC)</span>
-                        <strong className="stat-val" style={{ color: "#10b981" }}>₹1,60,200</strong>
                     </div>
                 </div>
             </section>

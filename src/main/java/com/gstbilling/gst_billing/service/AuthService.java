@@ -3,6 +3,7 @@ package com.gstbilling.gst_billing.service;
 import com.gstbilling.gst_billing.dto.*;
 import com.gstbilling.gst_billing.entity.Business;
 import com.gstbilling.gst_billing.entity.User;
+import com.gstbilling.gst_billing.entity.UserRole;
 import com.gstbilling.gst_billing.repository.BusinessRepository;
 import com.gstbilling.gst_billing.repository.UserRepository;
 import com.gstbilling.gst_billing.security.JwtService;
@@ -24,6 +25,7 @@ public class AuthService {
     private final JwtService jwt;
     private final EmailService emailService;
     private final CurrentUserService currentUserService;
+    private final AuditLogService auditLogService;
 
     public AuthService(
             UserRepository users,
@@ -31,7 +33,8 @@ public class AuthService {
             PasswordEncoder encoder,
             JwtService jwt,
             EmailService emailService,
-            CurrentUserService currentUserService
+            CurrentUserService currentUserService,
+            AuditLogService auditLogService
     ) {
         this.users = users;
         this.businesses = businesses;
@@ -39,6 +42,7 @@ public class AuthService {
         this.jwt = jwt;
         this.emailService = emailService;
         this.currentUserService = currentUserService;
+        this.auditLogService = auditLogService;
     }
 
     @Transactional
@@ -58,18 +62,52 @@ public class AuthService {
         user.setEmail(cleanEmail);
         user.setPassword(encoder.encode(request.password()));
         user.setBusiness(business);
+        user.setUserRole(UserRole.OWNER);
         users.save(user);
 
         return response(user);
     }
 
+    @Transactional(noRollbackFor = ResponseStatusException.class)
     public AuthResponse login(LoginRequest request) {
         String cleanEmail = request.email().trim().toLowerCase();
         User user = users.findByEmailIgnoreCase(cleanEmail)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password"));
 
+        if (user.isAccountLocked()) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                    "Account is temporarily locked due to multiple failed login attempts. Please try again after 15 minutes.");
+        }
+
         if (!encoder.matches(request.password(), user.getPassword())) {
+            int attempts = user.getFailedLoginAttempts() + 1;
+            user.setFailedLoginAttempts(attempts);
+            if (attempts >= 5) {
+                user.setLockedUntil(LocalDateTime.now().plusMinutes(15));
+                users.save(user);
+
+                auditLogService.log(
+                        user.getBusiness(),
+                        user.getId(),
+                        user.getEmail(),
+                        "ACCOUNT_LOCKED",
+                        "USER",
+                        user.getId(),
+                        "Account locked due to 5 consecutive failed login attempts",
+                        null, null, null
+                );
+
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                        "Account is temporarily locked due to multiple failed login attempts. Please try again after 15 minutes.");
+            }
+            users.save(user);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+        }
+
+        if (user.getFailedLoginAttempts() > 0 || user.getLockedUntil() != null) {
+            user.setFailedLoginAttempts(0);
+            user.setLockedUntil(null);
+            users.save(user);
         }
 
         return response(user);
@@ -147,8 +185,9 @@ public class AuthService {
     }
 
     private AuthResponse response(User user) {
+        Long tenantId = user.getBusiness() != null ? user.getBusiness().getId() : null;
         return new AuthResponse(
-                jwt.generateToken(user.getEmail(), user.getId(), user.getRole()),
+                jwt.generateToken(user.getEmail(), user.getId(), tenantId, user.getRole()),
                 user.getName(),
                 user.getEmail(),
                 user.getRole()

@@ -195,82 +195,85 @@ export default function Purchases() {
                 </div>
             )}
 
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div className="table-card">
                 {loading ? (
                     <div style={{ padding: "40px", textAlign: "center" }}>
                         <div className="spinner" style={{ margin: "0 auto 12px" }} />
                         <p>Loading purchase records...</p>
                     </div>
                 ) : purchases.length === 0 ? (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
-                        <p style={{ margin: "0 0 12px" }}>No purchase bills recorded yet.</p>
+                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
+                        <p style={{ margin: "0 0 12px", fontSize: "15px" }}>No purchase bills recorded yet.</p>
                         {suppliers.length > 0 && (
-                            <button className="btn btn-secondary btn-sm" onClick={openCreateModal}>
+                            <button className="primary-button action-btn-sm" onClick={openCreateModal}>
                                 Record First Purchase
                             </button>
                         )}
                     </div>
                 ) : (
-                    <table className="table" style={{ width: "100%", margin: 0 }}>
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Bill #</th>
-                                <th>Supplier</th>
-                                <th style={{ textAlign: "right" }}>Taxable</th>
-                                <th style={{ textAlign: "right" }}>Input GST</th>
-                                <th style={{ textAlign: "right" }}>Total Bill</th>
-                                <th style={{ textAlign: "right" }}>Paid</th>
-                                <th style={{ textAlign: "right" }}>Balance</th>
-                                <th>Status</th>
-                                <th style={{ textAlign: "center" }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {purchases.map(p => (
-                                <tr key={p.id}>
-                                    <td>{p.purchaseDate}</td>
-                                    <td style={{ fontWeight: "600", fontFamily: "monospace" }}>{p.supplierInvoiceNumber}</td>
-                                    <td style={{ fontWeight: "600" }}>{p.supplier ? p.supplier.name : "-"}</td>
-                                    <td style={{ textAlign: "right" }}>{fmt(p.taxableAmount)}</td>
-                                    <td style={{ textAlign: "right", color: "#6366f1" }}>{fmt(p.totalTax)}</td>
-                                    <td style={{ textAlign: "right", fontWeight: "700" }}>{fmt(p.grandTotal)}</td>
-                                    <td style={{ textAlign: "right", color: "#10b981" }}>{fmt(p.paidAmount)}</td>
-                                    <td style={{ textAlign: "right", color: Number(p.balanceAmount) > 0 ? "#ef4444" : "inherit", fontWeight: "600" }}>
-                                        {fmt(p.balanceAmount)}
-                                    </td>
-                                    <td>
-                                        <span className={`badge badge-${(p.paymentStatus || "UNPAID").toLowerCase()}`}>
-                                            {p.paymentStatus}
-                                        </span>
-                                    </td>
-                                    <td style={{ textAlign: "center" }}>
-                                        <div style={{ display: "inline-flex", gap: "6px" }}>
-                                            {Number(p.balanceAmount) > 0 && (
-                                                <button
-                                                    className="btn btn-secondary btn-sm"
-                                                    style={{ padding: "3px 8px", fontSize: "11px" }}
-                                                    onClick={() => {
-                                                        setPayModalPurchase(p);
-                                                        setPayAmount(p.balanceAmount);
-                                                    }}
-                                                >
-                                                    Pay
-                                                </button>
-                                            )}
-                                            <button
-                                                className="btn btn-danger btn-sm"
-                                                style={{ padding: "3px 8px", fontSize: "11px" }}
-                                                onClick={() => handleDelete(p.id)}
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
+                    <div className="table-container">
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Bill #</th>
+                                    <th>Supplier</th>
+                                    <th style={{ textAlign: "right" }}>Taxable</th>
+                                    <th style={{ textAlign: "right" }}>Input GST</th>
+                                    <th style={{ textAlign: "right" }}>Total Bill</th>
+                                    <th style={{ textAlign: "right" }}>Paid</th>
+                                    <th style={{ textAlign: "right" }}>Balance</th>
+                                    <th style={{ textAlign: "center" }}>Status</th>
+                                    <th style={{ textAlign: "right" }}>Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {purchases.map(p => (
+                                    <tr key={p.id}>
+                                        <td>{p.purchaseDate}</td>
+                                        <td style={{ fontWeight: "600", letterSpacing: "0.2px" }}>{p.supplierInvoiceNumber}</td>
+                                        <td><strong>{p.supplier ? p.supplier.name : "—"}</strong></td>
+                                        <td className="table-num" style={{ textAlign: "right" }}>{fmt(p.taxableAmount)}</td>
+                                        <td className="table-num" style={{ textAlign: "right", color: "#6366f1" }}>{fmt(p.totalTax)}</td>
+                                        <td className="table-num" style={{ textAlign: "right", fontWeight: "700" }}>{fmt(p.grandTotal)}</td>
+                                        <td className="table-num" style={{ textAlign: "right", color: "var(--success)" }}>{fmt(p.paidAmount)}</td>
+                                        <td className="table-num" style={{ textAlign: "right", color: Number(p.balanceAmount) > 0 ? "var(--warning)" : "var(--success)", fontWeight: "600" }}>
+                                            {fmt(p.balanceAmount)}
+                                        </td>
+                                        <td style={{ textAlign: "center" }}>
+                                            <span className={`status-badge status-${(p.paymentStatus || "UNPAID").toLowerCase()}`}>
+                                                {p.paymentStatus}
+                                            </span>
+                                        </td>
+                                        <td style={{ textAlign: "right" }}>
+                                            <div style={{ display: "inline-flex", gap: "6px", justifyContent: "flex-end" }}>
+                                                {Number(p.balanceAmount) > 0 && (
+                                                    <button
+                                                        type="button"
+                                                        className="action-btn-sm"
+                                                        onClick={() => {
+                                                            setPayModalPurchase(p);
+                                                            setPayAmount(p.balanceAmount);
+                                                        }}
+                                                    >
+                                                        Pay
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    className="action-btn-sm"
+                                                    style={{ color: "var(--danger)" }}
+                                                    onClick={() => handleDelete(p.id)}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 

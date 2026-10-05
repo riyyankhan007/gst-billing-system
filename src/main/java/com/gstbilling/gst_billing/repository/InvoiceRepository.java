@@ -63,4 +63,86 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     @Query("SELECT COALESCE(SUM(i.totalTax), 0) FROM Invoice i WHERE i.business.id = :businessId AND i.status != 'CANCELLED'")
     BigDecimal sumTotalTaxByBusinessId(@Param("businessId") Long businessId);
+
+    @Query("SELECT i.invoiceDate, " +
+           "COALESCE(SUM(i.grandTotal), 0), " +
+           "COALESCE(SUM(i.totalTax), 0), " +
+           "COALESCE(SUM(i.cgst), 0), " +
+           "COALESCE(SUM(i.sgst), 0), " +
+           "COALESCE(SUM(i.igst), 0), " +
+           "COUNT(i) " +
+           "FROM Invoice i " +
+           "WHERE i.business.id = :businessId " +
+           "AND i.invoiceDate BETWEEN :startDate AND :endDate " +
+           "AND i.status != 'CANCELLED' " +
+           "GROUP BY i.invoiceDate " +
+           "ORDER BY i.invoiceDate ASC")
+    List<Object[]> getSalesAndTaxTrendByDateBetween(
+            @Param("businessId") Long businessId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    @Query("SELECT c.id, c.name, " +
+           "COUNT(i), " +
+           "COALESCE(SUM(i.grandTotal), 0), " +
+           "COALESCE(SUM(i.balanceAmount), 0) " +
+           "FROM Invoice i JOIN i.customer c " +
+           "WHERE i.business.id = :businessId " +
+           "AND i.invoiceDate BETWEEN :startDate AND :endDate " +
+           "AND i.status != 'CANCELLED' " +
+           "GROUP BY c.id, c.name " +
+           "ORDER BY SUM(i.grandTotal) DESC")
+    List<Object[]> getTopCustomersByDateBetween(
+            @Param("businessId") Long businessId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    @Query("SELECT it.productId, it.productName, " +
+           "COALESCE(SUM(it.quantity), 0), " +
+           "COALESCE(SUM(it.totalAmount), 0) " +
+           "FROM InvoiceItem it JOIN it.invoice i " +
+           "WHERE i.business.id = :businessId " +
+           "AND i.invoiceDate BETWEEN :startDate AND :endDate " +
+           "AND i.status != 'CANCELLED' " +
+           "GROUP BY it.productId, it.productName " +
+           "ORDER BY SUM(it.totalAmount) DESC")
+    List<Object[]> getTopProductsByDateBetween(
+            @Param("businessId") Long businessId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    @Query("SELECT i.status, COUNT(i), COALESCE(SUM(i.grandTotal), 0), COALESCE(SUM(i.paidAmount), 0), COALESCE(SUM(i.balanceAmount), 0) " +
+           "FROM Invoice i " +
+           "WHERE i.business.id = :businessId " +
+           "AND i.invoiceDate BETWEEN :startDate AND :endDate " +
+           "GROUP BY i.status")
+    List<Object[]> getStatusBreakdownByDateBetween(
+            @Param("businessId") Long businessId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
+
+    @Query("SELECT COUNT(i), COALESCE(SUM(i.balanceAmount), 0) FROM Invoice i " +
+           "WHERE i.business.id = :businessId " +
+           "AND i.dueDate < :today " +
+           "AND i.balanceAmount > 0 " +
+           "AND i.status != 'CANCELLED'")
+    List<Object[]> getOverdueSummary(
+            @Param("businessId") Long businessId,
+            @Param("today") LocalDate today
+    );
+
+    @Query("SELECT COALESCE(SUM(i.totalTax), 0), COALESCE(SUM(i.cgst), 0), COALESCE(SUM(i.sgst), 0), COALESCE(SUM(i.igst), 0), COALESCE(SUM(i.balanceAmount), 0) " +
+           "FROM Invoice i " +
+           "WHERE i.business.id = :businessId " +
+           "AND i.invoiceDate BETWEEN :startDate AND :endDate " +
+           "AND i.status != 'CANCELLED'")
+    List<Object[]> getPeriodTaxAndBalanceSummary(
+            @Param("businessId") Long businessId,
+            @Param("startDate") LocalDate startDate,
+            @Param("endDate") LocalDate endDate
+    );
 }

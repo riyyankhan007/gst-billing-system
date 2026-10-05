@@ -16,15 +16,19 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     List<Payment> findByCustomer_IdAndBusiness_IdOrderByPaymentDateDesc(Long customerId, Long businessId);
     Optional<Payment> findByIdAndBusiness_Id(Long id, Long businessId);
 
-    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.invoice.id = :invoiceId AND p.business.id = :businessId")
+    Optional<Payment> findByGatewayPaymentId(String gatewayPaymentId);
+    Optional<Payment> findByReceiptNumberAndBusiness_Id(String receiptNumber, Long businessId);
+    boolean existsByReceiptNumberAndBusiness_Id(String receiptNumber, Long businessId);
+
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.invoice.id = :invoiceId AND p.business.id = :businessId AND p.status = 'SUCCESS'")
     BigDecimal sumAmountByInvoiceIdAndBusinessId(@Param("invoiceId") Long invoiceId, @Param("businessId") Long businessId);
 
-    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.business.id = :businessId")
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.business.id = :businessId AND p.status = 'SUCCESS'")
     BigDecimal sumTotalPaymentsByBusinessId(@Param("businessId") Long businessId);
 
-    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.business.id = :businessId AND p.paymentDate = :date")
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.business.id = :businessId AND p.paymentDate = :date AND p.status = 'SUCCESS'")
     BigDecimal sumPaymentsByBusinessIdAndDate(@Param("businessId") Long businessId, @Param("date") LocalDate date);
 
-    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.business.id = :businessId AND p.paymentDate BETWEEN :startDate AND :endDate")
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p WHERE p.business.id = :businessId AND p.paymentDate BETWEEN :startDate AND :endDate AND p.status = 'SUCCESS'")
     BigDecimal sumPaymentsByBusinessIdAndDateBetween(@Param("businessId") Long businessId, @Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 }

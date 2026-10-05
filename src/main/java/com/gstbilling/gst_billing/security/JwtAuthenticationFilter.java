@@ -23,16 +23,28 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
-        String header = request.getHeader("Authorization");
-        if (header != null && header.startsWith("Bearer ") && SecurityContextHolder.getContext().getAuthentication() == null) {
-            try {
-                String token = header.substring(7);
-                String email = jwtService.extractEmail(token);
-                String role = jwtService.extractRole(token);
-                List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + (role != null ? role.toUpperCase() : "ADMIN")));
-                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(email, null, authorities));
-            } catch (Exception ignored) { }
+        try {
+            String header = request.getHeader("Authorization");
+            if (header != null && header.startsWith("Bearer ")) {
+                try {
+                    String token = header.substring(7);
+                    String email = jwtService.extractEmail(token);
+                    String role = jwtService.extractRole(token);
+                    Long tenantId = jwtService.extractTenantId(token);
+
+                    if (tenantId != null) {
+                        TenantContext.setTenantId(tenantId);
+                    }
+
+                    String roleName = (role != null && !role.isBlank()) ? role.toUpperCase() : "VIEWER";
+                    List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + roleName));
+                    SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(email, null, authorities));
+                } catch (Exception ignored) { }
+            }
+            chain.doFilter(request, response);
+        } finally {
+            TenantContext.clear();
+            SecurityContextHolder.clearContext();
         }
-        chain.doFilter(request, response);
     }
 }

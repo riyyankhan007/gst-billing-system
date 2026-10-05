@@ -7,4 +7,7 @@ import java.util.List;
 public interface StockMovementRepository extends JpaRepository<StockMovement, Long> {
     List<StockMovement> findByBusiness_IdOrderByCreatedAtDesc(Long businessId);
     List<StockMovement> findByProduct_IdAndBusiness_IdOrderByCreatedAtDesc(Long productId, Long businessId);
+
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByBusiness_Id(Long businessId);
 }

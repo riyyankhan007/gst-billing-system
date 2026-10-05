@@ -102,6 +102,39 @@ public class Invoice {
 
     private String status;
 
+    @Column(name = "financial_year", length = 10)
+    private String financialYear;
+
+    @Column(name = "round_off_amount")
+    private BigDecimal roundOffAmount = BigDecimal.ZERO;
+
+    @Column(name = "cancellation_reason", columnDefinition = "TEXT")
+    private String cancellationReason;
+
+    @Column(name = "cancelled_at")
+    private LocalDateTime cancelledAt;
+
+    @Column(name = "cancelled_by")
+    private String cancelledBy;
+
+    @Column(name = "irn", length = 64)
+    private String irn;
+
+    @Column(name = "ack_no", length = 50)
+    private String ackNo;
+
+    @Column(name = "ack_date")
+    private LocalDateTime ackDate;
+
+    @Column(name = "signed_qr_code", columnDefinition = "TEXT")
+    private String signedQrCode;
+
+    @Column(name = "einvoice_status", length = 20)
+    private String einvoiceStatus;
+
+    @Column(name = "einvoice_error_message", columnDefinition = "TEXT")
+    private String einvoiceErrorMessage;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -335,5 +368,104 @@ public class Invoice {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getFinancialYear() {
+        return financialYear;
+    }
+
+    public void setFinancialYear(String financialYear) {
+        this.financialYear = financialYear;
+    }
+
+    public BigDecimal getRoundOffAmount() {
+        return roundOffAmount;
+    }
+
+    public void setRoundOffAmount(BigDecimal roundOffAmount) {
+        this.roundOffAmount = roundOffAmount;
+    }
+
+    public String getCancellationReason() {
+        return cancellationReason;
+    }
+
+    public void setCancellationReason(String cancellationReason) {
+        this.cancellationReason = cancellationReason;
+    }
+
+    public LocalDateTime getCancelledAt() {
+        return cancelledAt;
+    }
+
+    public void setCancelledAt(LocalDateTime cancelledAt) {
+        this.cancelledAt = cancelledAt;
+    }
+
+    public String getCancelledBy() {
+        return cancelledBy;
+    }
+
+    public void setCancelledBy(String cancelledBy) {
+        this.cancelledBy = cancelledBy;
+    }
+
+    public String getIrn() {
+        return irn;
+    }
+
+    public void setIrn(String irn) {
+        this.irn = irn;
+    }
+
+    public String getAckNo() {
+        return ackNo;
+    }
+
+    public void setAckNo(String ackNo) {
+        this.ackNo = ackNo;
+    }
+
+    public LocalDateTime getAckDate() {
+        return ackDate;
+    }
+
+    public void setAckDate(LocalDateTime ackDate) {
+        this.ackDate = ackDate;
+    }
+
+    public String getSignedQrCode() {
+        return signedQrCode;
+    }
+
+    public void setSignedQrCode(String signedQrCode) {
+        this.signedQrCode = signedQrCode;
+    }
+
+    public String getEinvoiceStatus() {
+        return einvoiceStatus;
+    }
+
+    public void setEinvoiceStatus(String einvoiceStatus) {
+        this.einvoiceStatus = einvoiceStatus;
+    }
+
+    public String getEinvoiceErrorMessage() {
+        return einvoiceErrorMessage;
+    }
+
+    public void setEinvoiceErrorMessage(String einvoiceErrorMessage) {
+        this.einvoiceErrorMessage = einvoiceErrorMessage;
+    }
+
+    public InvoiceStatus getInvoiceStatusEnum() {
+        if (status == null || status.isBlank()) {
+            return InvoiceStatus.DRAFT;
+        }
+        try {
+            return InvoiceStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return InvoiceStatus.DRAFT;
+        }
     }
 }

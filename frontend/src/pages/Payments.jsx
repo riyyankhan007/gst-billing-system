@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { getPayments, recordPayment, deletePayment, getInvoices } from "../services/api";
+import { getPayments, recordPayment, deletePayment, getInvoices, downloadPaymentReceiptPdf, reconcileAllPayments } from "../services/api";
 
 export default function Payments({ onSelectInvoice }) {
     const [payments, setPayments] = useState([]);
@@ -7,6 +7,7 @@ export default function Payments({ onSelectInvoice }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [successMessage, setSuccessMessage] = useState("");
+    const [reconciling, setReconciling] = useState(false);
 
     // Modal state
     const [showModal, setShowModal] = useState(false);
@@ -78,6 +79,10 @@ export default function Payments({ onSelectInvoice }) {
             return;
         }
 
+        const idempotencyKey = (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : ("pay_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
+
         try {
             setSubmitting(true);
             setModalError("");
@@ -88,7 +93,7 @@ export default function Payments({ onSelectInvoice }) {
                 paymentMethod,
                 referenceNumber,
                 notes
-            });
+            }, idempotencyKey);
             setShowModal(false);
             setSuccessMessage(`Payment of ${fmt(payNum)} recorded successfully!`);
             setTimeout(() => setSuccessMessage(""), 4000);
@@ -97,6 +102,36 @@ export default function Payments({ onSelectInvoice }) {
             setModalError(err.message || "Failed to record payment");
         } finally {
             setSubmitting(false);
+        }
+    }
+
+    async function handleDownloadReceipt(payment) {
+        try {
+            const blob = await downloadPaymentReceiptPdf(payment.id);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Receipt-${payment.receiptNumber || payment.id}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            alert("Error downloading receipt PDF: " + err.message);
+        }
+    }
+
+    async function handleReconcile() {
+        try {
+            setReconciling(true);
+            const res = await reconcileAllPayments();
+            setSuccessMessage(`Ledger Reconciliation Complete: verified ${res.totalInvoicesChecked} invoices, resolved ${res.totalDriftsResolved} drifts.`);
+            setTimeout(() => setSuccessMessage(""), 5000);
+            await loadData();
+        } catch (err) {
+            setError(err.message || "Failed to reconcile payments");
+        } finally {
+            setReconciling(false);
         }
     }
 
@@ -135,9 +170,19 @@ export default function Payments({ onSelectInvoice }) {
                     <h1>Payments Received</h1>
                     <p>Track collections, payment receipts, and settle customer invoices</p>
                 </div>
-                <button className="primary-button" onClick={() => openRecordModal()} disabled={invoices.length === 0}>
-                    + Record Payment
-                </button>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <button
+                        className="secondary-button"
+                        onClick={handleReconcile}
+                        disabled={reconciling}
+                        title="Audit and heal any drift between payments and invoice balances"
+                    >
+                        {reconciling ? "Reconciling..." : "⚡ Reconcile Ledgers"}
+                    </button>
+                    <button className="primary-button" onClick={() => openRecordModal()} disabled={invoices.length === 0}>
+                        + Record Payment
+                    </button>
+                </div>
             </div>
 
             {successMessage && (
@@ -159,7 +204,7 @@ export default function Payments({ onSelectInvoice }) {
                         <input
                             type="text"
                             className="search-input"
-                            placeholder="Search by invoice #, customer, or ref #..."
+                            placeholder="Search by invoice #, customer, receipt, or ref #..."
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                             style={{ minWidth: "280px" }}
@@ -172,10 +217,13 @@ export default function Payments({ onSelectInvoice }) {
                         >
                             <option value="ALL">All Methods</option>
                             <option value="UPI">UPI</option>
-                            <option value="BANK TRANSFER">Bank Transfer</option>
+                            <option value="NEFT">NEFT</option>
+                            <option value="RTGS">RTGS</option>
+                            <option value="IMPS">IMPS</option>
                             <option value="CASH">Cash</option>
                             <option value="CARD">Card</option>
                             <option value="CHEQUE">Cheque</option>
+                            <option value="NETBANKING">Net Banking</option>
                         </select>
                     </div>
                     <div style={{ textAlign: "right" }}>
@@ -186,73 +234,97 @@ export default function Payments({ onSelectInvoice }) {
             </div>
 
             {/* Payments Table */}
-            <div className="card" style={{ padding: "0", overflow: "hidden" }}>
+            <div className="table-card">
                 {loading ? (
                     <div style={{ padding: "40px", textAlign: "center" }}>
                         <div className="spinner" style={{ margin: "0 auto 12px" }} />
                         <p>Loading payments...</p>
                     </div>
                 ) : filteredPayments.length === 0 ? (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
-                        <p style={{ fontSize: "16px", margin: "0 0 12px" }}>No payment records found.</p>
+                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
+                        <p style={{ fontSize: "15px", margin: "0 0 12px" }}>No payment records found.</p>
                         {invoices.length > 0 && (
-                            <button className="btn btn-secondary btn-sm" onClick={() => openRecordModal()}>
+                            <button className="primary-button action-btn-sm" onClick={() => openRecordModal()}>
                                 Record first payment
                             </button>
                         )}
                     </div>
                 ) : (
-                    <table className="table" style={{ width: "100%", margin: 0 }}>
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Invoice #</th>
-                                <th>Customer</th>
-                                <th>Method</th>
-                                <th>Ref / UTR #</th>
-                                <th style={{ textAlign: "right" }}>Amount</th>
-                                <th>Recorded By</th>
-                                <th style={{ textAlign: "center" }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredPayments.map(p => (
-                                <tr key={p.id}>
-                                    <td>{p.paymentDate}</td>
-                                    <td>
-                                        <button
-                                            className="btn-link"
-                                            style={{ fontWeight: "600", padding: 0 }}
-                                            onClick={() => onSelectInvoice && onSelectInvoice(p.invoiceId)}
-                                        >
-                                            {p.invoiceNumber}
-                                        </button>
-                                    </td>
-                                    <td style={{ fontWeight: "600" }}>{p.customerName || "-"}</td>
-                                    <td>
-                                        <span className="badge" style={{ background: "rgba(99, 102, 241, 0.1)", color: "#4f46e5" }}>
-                                            {p.paymentMethod}
-                                        </span>
-                                    </td>
-                                    <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{p.referenceNumber || "-"}</td>
-                                    <td style={{ textAlign: "right", fontWeight: "700", color: "#10b981" }}>
-                                        {fmt(p.amount)}
-                                    </td>
-                                    <td style={{ fontSize: "12px", color: "var(--muted)" }}>{p.createdBy || "System"}</td>
-                                    <td style={{ textAlign: "center" }}>
-                                        <button
-                                            className="btn btn-danger btn-sm"
-                                            onClick={() => handleDeletePayment(p.id)}
-                                            title="Reverse / delete this payment"
-                                            style={{ padding: "4px 8px", fontSize: "11px" }}
-                                        >
-                                            Reverse
-                                        </button>
-                                    </td>
+                    <div className="table-container">
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Receipt #</th>
+                                    <th>Date</th>
+                                    <th>Invoice #</th>
+                                    <th>Customer</th>
+                                    <th>Method</th>
+                                    <th>Ref / UTR #</th>
+                                    <th style={{ textAlign: "right", paddingRight: "24px" }}>Amount</th>
+                                    <th style={{ paddingLeft: "16px" }}>Recorded By</th>
+                                    <th style={{ textAlign: "right" }}>Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {filteredPayments.map(p => (
+                                    <tr key={p.id}>
+                                        <td>
+                                            <span className="badge" style={{ fontSize: "11px", fontWeight: 600, background: "#e0f2fe", color: "#0369a1", letterSpacing: "0.2px" }}>
+                                                {p.receiptNumber || ("RCP-" + p.id)}
+                                            </span>
+                                        </td>
+                                        <td>{p.paymentDate}</td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                className="btn-link"
+                                                style={{ fontWeight: "600", padding: 0 }}
+                                                onClick={() => onSelectInvoice && onSelectInvoice(p.invoiceId)}
+                                            >
+                                                {p.invoiceNumber}
+                                            </button>
+                                        </td>
+                                        <td><strong>{p.customerName || "—"}</strong></td>
+                                        <td>
+                                            <span className="badge" style={{ background: "#ede9fe", color: "#6d28d9", fontWeight: 600 }}>
+                                                {p.paymentMethod}
+                                            </span>
+                                        </td>
+                                        <td style={{ letterSpacing: "0.2px", color: "var(--text-secondary)" }}>{p.referenceNumber || "—"}</td>
+                                        <td className="table-num" style={{ textAlign: "right", paddingRight: "24px", color: "var(--success)", fontWeight: 700, fontSize: "14px" }}>
+                                            {fmt(p.amount)}
+                                        </td>
+                                        <td style={{ paddingLeft: "16px", fontSize: "12px", color: "var(--text-muted)" }}>
+                                            <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                                {p.createdBy || "System"}
+                                            </span>
+                                        </td>
+                                        <td style={{ textAlign: "right" }}>
+                                            <div style={{ display: "inline-flex", gap: "6px", justifyContent: "flex-end" }}>
+                                                <button
+                                                    type="button"
+                                                    className="action-btn-sm"
+                                                    onClick={() => handleDownloadReceipt(p)}
+                                                    title="Download official Payment Receipt PDF"
+                                                >
+                                                    Receipt
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="action-btn-sm"
+                                                    style={{ color: "var(--danger)" }}
+                                                    onClick={() => handleDeletePayment(p.id)}
+                                                    title="Reverse / delete this payment"
+                                                >
+                                                    Reverse
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
@@ -347,12 +419,15 @@ export default function Payments({ onSelectInvoice }) {
                                         onChange={e => setPaymentMethod(e.target.value)}
                                         required
                                     >
-                                        <option value="UPI">UPI</option>
-                                        <option value="Bank Transfer">Bank Transfer (NEFT/RTGS/IMPS)</option>
-                                        <option value="Cash">Cash</option>
-                                        <option value="Card">Card</option>
-                                        <option value="Cheque">Cheque</option>
-                                        <option value="Other">Other</option>
+                                        <option value="UPI">UPI / QR Code</option>
+                                        <option value="NEFT">NEFT (Bank Transfer)</option>
+                                        <option value="RTGS">RTGS (High Value)</option>
+                                        <option value="IMPS">IMPS (Instant)</option>
+                                        <option value="CASH">Cash</option>
+                                        <option value="CARD">Credit / Debit Card</option>
+                                        <option value="CHEQUE">Cheque</option>
+                                        <option value="NETBANKING">Net Banking</option>
+                                        <option value="OTHER">Other</option>
                                     </select>
                                 </div>
                                 <div>

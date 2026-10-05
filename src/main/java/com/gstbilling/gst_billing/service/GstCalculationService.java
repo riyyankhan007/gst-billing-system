@@ -1,5 +1,6 @@
 package com.gstbilling.gst_billing.service;
 
+import com.gstbilling.gst_billing.util.IndianTaxValidator;
 import com.gstbilling.gst_billing.util.NumberToWordsConverter;
 import org.springframework.stereotype.Service;
 
@@ -44,8 +45,25 @@ public class GstCalculationService {
             BigDecimal grandTotal,
             String amountInWords,
             boolean intraState,
-            List<ItemOutput> items
-    ) {}
+            List<ItemOutput> items,
+            boolean reverseCharge,
+            BigDecimal roundOffAmount
+    ) {
+        // Compatibility constructor for existing callers
+        public GstResult(
+                BigDecimal taxableAmount,
+                BigDecimal cgst,
+                BigDecimal sgst,
+                BigDecimal igst,
+                BigDecimal totalTax,
+                BigDecimal grandTotal,
+                String amountInWords,
+                boolean intraState,
+                List<ItemOutput> items
+        ) {
+            this(taxableAmount, cgst, sgst, igst, totalTax, grandTotal, amountInWords, intraState, items, false, BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        }
+    }
 
     public GstResult calculate(
             String supplierState,
@@ -54,18 +72,45 @@ public class GstCalculationService {
             BigDecimal invoiceDiscount,
             List<ItemInput> itemInputs
     ) {
+        return calculate(supplierState, customerState, isExport, false, invoiceDiscount, itemInputs);
+    }
+
+    public GstResult calculate(
+            String supplierState,
+            String customerState,
+            boolean isExport,
+            boolean reverseCharge,
+            BigDecimal invoiceDiscount,
+            List<ItemInput> itemInputs
+    ) {
+        if (itemInputs == null || itemInputs.isEmpty()) {
+            throw new IllegalArgumentException("Invoice must have at least one line item");
+        }
+
         BigDecimal sumTaxable = BigDecimal.ZERO;
         BigDecimal sumTotalTax = BigDecimal.ZERO;
         List<ItemOutput> calculatedItems = new ArrayList<>();
 
         for (ItemInput item : itemInputs) {
-            BigDecimal qty = (item.quantity() != null && item.quantity().compareTo(BigDecimal.ZERO) > 0)
-                    ? item.quantity()
-                    : BigDecimal.ONE;
+            BigDecimal qty = (item.quantity() != null) ? item.quantity() : BigDecimal.ONE;
+            if (qty.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Quantity must be greater than zero: " + qty);
+            }
 
             BigDecimal price = item.unitPrice() != null ? item.unitPrice() : BigDecimal.ZERO;
+            if (price.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalArgumentException("Unit price cannot be negative: " + price);
+            }
+
             BigDecimal gstRate = item.gstRate() != null ? item.gstRate() : BigDecimal.ZERO;
+            if (gstRate.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalArgumentException("GST rate cannot be negative: " + gstRate);
+            }
+
             BigDecimal discount = item.discount() != null ? item.discount() : BigDecimal.ZERO;
+            if (discount.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalArgumentException("Discount cannot be negative: " + discount);
+            }
 
             BigDecimal lineGross = qty.multiply(price).setScale(2, RoundingMode.HALF_UP);
             BigDecimal lineAfterDiscount = lineGross.subtract(discount);
@@ -118,7 +163,7 @@ public class GstCalculationService {
 
         boolean isIntraState = false;
         if (!isExport && supplierState != null && customerState != null) {
-            isIntraState = supplierState.trim().equalsIgnoreCase(customerState.trim());
+            isIntraState = IndianTaxValidator.isIntraState(supplierState, customerState);
         }
 
         BigDecimal cgst = BigDecimal.ZERO;
@@ -132,8 +177,17 @@ public class GstCalculationService {
             igst = sumTotalTax;
         }
 
-        BigDecimal grandTotal = sumTaxable.add(sumTotalTax).setScale(2, RoundingMode.HALF_UP);
-        String inWords = NumberToWordsConverter.convertToIndianCurrencyWords(grandTotal);
+        // Under Reverse Charge Mechanism (RCM), buyer pays tax directly to govt,
+        // so seller invoice grand total is taxable amount only.
+        BigDecimal rawGrandTotal = reverseCharge
+                ? sumTaxable.setScale(2, RoundingMode.HALF_UP)
+                : sumTaxable.add(sumTotalTax).setScale(2, RoundingMode.HALF_UP);
+
+        // Round off to nearest rupee
+        BigDecimal roundedGrandTotal = rawGrandTotal.setScale(0, RoundingMode.HALF_UP).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal roundOffAmount = roundedGrandTotal.subtract(rawGrandTotal).setScale(2, RoundingMode.HALF_UP);
+
+        String inWords = NumberToWordsConverter.convertToIndianCurrencyWords(rawGrandTotal);
 
         return new GstResult(
                 sumTaxable,
@@ -141,10 +195,12 @@ public class GstCalculationService {
                 sgst,
                 igst,
                 sumTotalTax,
-                grandTotal,
+                rawGrandTotal,
                 inWords,
                 isIntraState,
-                calculatedItems
+                calculatedItems,
+                reverseCharge,
+                roundOffAmount
         );
     }
 }

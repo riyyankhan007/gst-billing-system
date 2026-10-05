@@ -165,8 +165,12 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
             }))
         };
 
+        const idempotencyKey = (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : ("inv_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9));
+
         try {
-            const created = await createInvoice(payload);
+            const created = await createInvoice(payload, idempotencyKey);
             setMessage({ text: `Invoice #${created.invoiceNumber} created (${created.status})!`, type: "success" });
             setTimeout(() => {
                 if (onCreated) {

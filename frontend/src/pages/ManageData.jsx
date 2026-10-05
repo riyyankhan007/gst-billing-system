@@ -154,9 +154,9 @@ export default function ManageData({ kind }) {
         }
     };
 
-    const handleDelete = async (id) => {
+    const handleDelete = async (id, name) => {
         const itemType = isCustomer ? "customer" : "product";
-        if (!window.confirm(`Are you sure you want to delete this ${itemType}?`)) {
+        if (!window.confirm(`Are you sure you want to delete ${name || thisItem}?`)) {
             return;
         }
 
@@ -214,113 +214,109 @@ export default function ManageData({ kind }) {
                     <h1>{isCustomer ? "Customer Directory & B2B/B2C Profiles" : "Products & Services Catalog"}</h1>
                     <p>
                         {isCustomer
-                            ? "Manage customer GSTINs, billing addresses, credit limits, and balances"
-                            : "Define catalog items, HSN/SAC codes, standard GST rates, and inventory stock"}
+                            ? "Manage customer GSTINs, official billing addresses, credit terms, and ledger history."
+                            : "Define catalog items, HSN/SAC codes, standard GST rates, and inventory stock."}
                     </p>
                 </div>
             </div>
 
             {/* Error & Success Banners */}
             {error && (
-                <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", borderRadius: "8px" }}>
+                <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.12)", color: "var(--danger)", borderRadius: "var(--radius-sm)", border: "1px solid #fecaca", fontWeight: 500 }}>
                     {error}
                 </div>
             )}
             {success && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600" }}>
+                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.12)", color: "#065f46", borderRadius: "var(--radius-sm)", border: "1px solid #a7f3d0", fontWeight: 600 }}>
                     ✓ {success}
                 </div>
             )}
 
             {/* Creation Form Card */}
-            <div className="card" style={{ padding: "24px" }}>
-                <h3 style={{ margin: "0 0 16px", fontSize: "18px", fontWeight: "600" }}>
-                    {isCustomer ? "+ Add New Customer" : "+ Add New Product / Service"}
-                </h3>
+            <div className="form-card">
+                <div className="form-card-title">
+                    <span style={{ fontSize: "18px", color: "var(--primary)" }}>+</span>
+                    {isCustomer ? "Add New Customer / Business Client" : "Add New Product / Service"}
+                </div>
 
-                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
                     {/* CUSTOMER FORM FIELDS */}
                     {isCustomer && (
                         <>
-                            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "16px" }}>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Customer / Company Name *
-                                    </label>
+                            <div className="form-grid-4">
+                                <div className="form-field col-span-2">
+                                    <label>Customer / Company Name <span className="req-star">*</span></label>
                                     <input
                                         type="text"
-                                        className="input"
+                                        className="form-control"
                                         value={form.name || ""}
                                         onChange={e => handleInputChange("name", e.target.value)}
                                         placeholder="e.g. Apex Enterprises Pvt Ltd"
                                         required
                                     />
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Customer Type *
-                                    </label>
+                                <div className="form-field">
+                                    <label>Customer Type <span className="req-star">*</span></label>
                                     <select
-                                        className="input"
+                                        className="form-control"
                                         value={form.customerType || "B2B"}
                                         onChange={e => handleInputChange("customerType", e.target.value)}
                                     >
                                         <option value="B2B">B2B (Registered Business)</option>
-                                        <option value="B2C">B2C (Consumer)</option>
-                                        <option value="EXPORT">EXPORT</option>
+                                        <option value="B2C">B2C (Consumer / Unregistered)</option>
+                                        <option value="EXPORT">EXPORT (Overseas)</option>
                                     </select>
+                                </div>
+                                <div className="form-field">
+                                    <label>Credit Terms (Days)</label>
+                                    <input
+                                        type="number"
+                                        className="form-control"
+                                        value={form.paymentTerms || "15"}
+                                        onChange={e => handleInputChange("paymentTerms", e.target.value)}
+                                        placeholder="15"
+                                    />
                                 </div>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        GSTIN (Required for B2B)
-                                    </label>
+                            <div className="form-grid-4">
+                                <div className="form-field">
+                                    <label>GSTIN (15 Digits)</label>
                                     <input
                                         type="text"
                                         maxLength="15"
-                                        className="input"
+                                        className="form-control"
                                         value={form.gstin || ""}
                                         onChange={e => handleInputChange("gstin", e.target.value.toUpperCase())}
-                                        placeholder="15-digit GSTIN"
+                                        placeholder="e.g. 27AABCT3518Q1ZV"
                                     />
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        PAN (Optional)
-                                    </label>
+                                <div className="form-field">
+                                    <label>PAN Number</label>
                                     <input
                                         type="text"
                                         maxLength="10"
-                                        className="input"
+                                        className="form-control"
                                         value={form.pan || ""}
                                         onChange={e => handleInputChange("pan", e.target.value.toUpperCase())}
-                                        placeholder="10-digit PAN"
+                                        placeholder="e.g. AABCT3518Q"
                                     />
                                 </div>
-                            </div>
-
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Phone Number (for WhatsApp reminder)
-                                    </label>
+                                <div className="form-field">
+                                    <label>Phone Number (WhatsApp)</label>
                                     <input
                                         type="tel"
-                                        className="input"
+                                        className="form-control"
                                         value={form.phone || ""}
                                         onChange={e => handleInputChange("phone", e.target.value)}
                                         placeholder="e.g. 9876543210"
                                     />
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Email Address (for Email reminder)
-                                    </label>
+                                <div className="form-field">
+                                    <label>Email Address</label>
                                     <input
                                         type="email"
-                                        className="input"
+                                        className="form-control"
                                         value={form.email || ""}
                                         onChange={e => handleInputChange("email", e.target.value)}
                                         placeholder="billing@customer.com"
@@ -328,66 +324,59 @@ export default function ManageData({ kind }) {
                                 </div>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "16px" }}>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        State *
-                                    </label>
+                            <div className="form-grid-4">
+                                <div className="form-field col-span-2">
+                                    <label>State / Place of Supply <span className="req-star">*</span></label>
                                     <input
                                         type="text"
-                                        className="input"
+                                        className="form-control"
                                         value={form.state || ""}
                                         onChange={e => handleInputChange("state", e.target.value)}
+                                        placeholder="e.g. Maharashtra"
                                         required
                                     />
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        State Code
-                                    </label>
+                                <div className="form-field">
+                                    <label>State Code</label>
                                     <input
                                         type="text"
-                                        className="input"
+                                        className="form-control"
                                         value={form.stateCode || ""}
                                         onChange={e => handleInputChange("stateCode", e.target.value)}
+                                        placeholder="27"
                                     />
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Credit Terms (Days)
-                                    </label>
+                                <div className="form-field">
+                                    <label>Credit Limit (₹)</label>
                                     <input
                                         type="number"
-                                        className="input"
-                                        value={form.paymentTerms || "15"}
-                                        onChange={e => handleInputChange("paymentTerms", e.target.value)}
+                                        className="form-control"
+                                        value={form.creditLimit || "0"}
+                                        onChange={e => handleInputChange("creditLimit", e.target.value)}
+                                        placeholder="0.00"
                                     />
                                 </div>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Billing Address
-                                    </label>
+                            <div className="form-grid-2">
+                                <div className="form-field">
+                                    <label>Billing Address</label>
                                     <textarea
-                                        className="input"
+                                        className="form-control"
                                         rows="2"
                                         value={form.billingAddress || ""}
                                         onChange={e => handleInputChange("billingAddress", e.target.value)}
-                                        placeholder="Official Billing Address"
+                                        placeholder="Registered corporate address"
                                     />
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Shipping Address (Optional)
-                                    </label>
+                                <div className="form-field">
+                                    <label>Shipping Address (Optional)</label>
                                     <textarea
-                                        className="input"
+                                        className="form-control"
                                         rows="2"
                                         value={form.shippingAddress || ""}
                                         onChange={e => handleInputChange("shippingAddress", e.target.value)}
-                                        placeholder="Delivery destination address"
+                                        placeholder="Warehouse or delivery destination"
                                     />
                                 </div>
                             </div>
@@ -397,26 +386,22 @@ export default function ManageData({ kind }) {
                     {/* PRODUCT FORM FIELDS */}
                     {!isCustomer && (
                         <>
-                            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "16px" }}>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Item / Product Name *
-                                    </label>
+                            <div className="form-grid-4">
+                                <div className="form-field col-span-2">
+                                    <label>Item / Product Name <span className="req-star">*</span></label>
                                     <input
                                         type="text"
-                                        className="input"
+                                        className="form-control"
                                         value={form.name || ""}
                                         onChange={e => handleInputChange("name", e.target.value)}
-                                        placeholder="e.g. Dell Monitor 27-inch or IT Consulting"
+                                        placeholder="e.g. Dell Monitor 27-inch 4K or IT Consulting"
                                         required
                                     />
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Type *
-                                    </label>
+                                <div className="form-field">
+                                    <label>Type <span className="req-star">*</span></label>
                                     <select
-                                        className="input"
+                                        className="form-control"
                                         value={form.productType || "PRODUCT"}
                                         onChange={e => handleInputChange("productType", e.target.value)}
                                     >
@@ -424,13 +409,11 @@ export default function ManageData({ kind }) {
                                         <option value="SERVICE">Service (Non-stock)</option>
                                     </select>
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        SKU / Part Code
-                                    </label>
+                                <div className="form-field">
+                                    <label>SKU / Part Code</label>
                                     <input
                                         type="text"
-                                        className="input"
+                                        className="form-control"
                                         value={form.sku || ""}
                                         onChange={e => handleInputChange("sku", e.target.value)}
                                         placeholder="e.g. DELL-27-4K"
@@ -438,53 +421,45 @@ export default function ManageData({ kind }) {
                                 </div>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "16px" }}>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        HSN / SAC Code
-                                    </label>
+                            <div className="form-grid-4">
+                                <div className="form-field">
+                                    <label>HSN / SAC Code</label>
                                     <input
                                         type="text"
-                                        className="input"
+                                        className="form-control"
                                         value={form.hsnCode || ""}
                                         onChange={e => handleInputChange("hsnCode", e.target.value)}
                                         placeholder="e.g. 8471 or 9983"
                                     />
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Unit Price (₹) *
-                                    </label>
+                                <div className="form-field">
+                                    <label>Unit Price (₹) <span className="req-star">*</span></label>
                                     <input
                                         type="number"
                                         step="0.01"
-                                        className="input"
+                                        className="form-control"
                                         value={form.price || ""}
                                         onChange={e => handleInputChange("price", e.target.value)}
                                         placeholder="0.00"
                                         required
                                     />
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Standard GST Rate *
-                                    </label>
+                                <div className="form-field">
+                                    <label>Standard GST Rate <span className="req-star">*</span></label>
                                     <select
-                                        className="input"
+                                        className="form-control"
                                         value={form.gstRate || 18}
                                         onChange={e => handleInputChange("gstRate", Number(e.target.value))}
                                     >
                                         {GST_RATES.map(r => (
-                                            <option key={r} value={r}>{r}% GST</option>
+                                             <option key={r} value={r}>{r}% GST</option>
                                         ))}
                                     </select>
                                 </div>
-                                <div>
-                                    <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                        Unit of Measurement
-                                    </label>
+                                <div className="form-field">
+                                    <label>Unit of Measurement</label>
                                     <select
-                                        className="input"
+                                        className="form-control"
                                         value={form.unit || "PCS"}
                                         onChange={e => handleInputChange("unit", e.target.value)}
                                     >
@@ -496,39 +471,37 @@ export default function ManageData({ kind }) {
                             </div>
 
                             {form.productType === "PRODUCT" && (
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
-                                    <div>
-                                        <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                            Initial Stock Quantity
-                                        </label>
+                                <div className="form-grid-4">
+                                    <div className="form-field">
+                                        <label>Initial Stock Quantity</label>
                                         <input
                                             type="number"
-                                            step="0.01"
-                                            className="input"
+                                            step="1"
+                                            className="form-control"
                                             value={form.stockQuantity || "0"}
                                             onChange={e => handleInputChange("stockQuantity", e.target.value)}
+                                            placeholder="100"
                                         />
                                     </div>
-                                    <div>
-                                        <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
-                                            Low-stock Alert Threshold
-                                        </label>
+                                    <div className="form-field">
+                                        <label>Low-stock Alert Threshold</label>
                                         <input
                                             type="number"
-                                            step="0.01"
-                                            className="input"
+                                            step="1"
+                                            className="form-control"
                                             value={form.lowStockThreshold || "5"}
                                             onChange={e => handleInputChange("lowStockThreshold", e.target.value)}
+                                            placeholder="10"
                                         />
                                     </div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "24px" }}>
-                                        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "13px", cursor: "pointer" }}>
+                                    <div className="form-field col-span-2" style={{ justifyContent: "center" }}>
+                                        <label className="form-checkbox-wrap">
                                             <input
                                                 type="checkbox"
                                                 checked={Boolean(form.taxInclusive)}
                                                 onChange={e => handleInputChange("taxInclusive", e.target.checked)}
                                             />
-                                            Price is Tax-Inclusive
+                                            <span>Price is Tax-Inclusive</span>
                                         </label>
                                     </div>
                                 </div>
@@ -536,31 +509,39 @@ export default function ManageData({ kind }) {
                         </>
                     )}
 
-                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                        <button type="submit" className="btn btn-primary" disabled={saving}>
+                    <div className="form-actions-bar">
+                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                            * Indicates mandatory fields for GST compliance
+                        </span>
+                        <button type="submit" className="primary-button" disabled={saving}>
                             {saving ? "Saving..." : isCustomer ? "Save Customer" : "Save Product"}
                         </button>
                     </div>
                 </form>
             </div>
 
-            {/* List & Search Filter */}
-            <div className="card" style={{ padding: "16px 20px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
+            {/* List & Search Filter Bar */}
+            <div className="table-card">
+                <div className="table-header-card">
                     <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", flex: 1, alignItems: "center" }}>
-                        <input
-                            type="text"
-                            className="search-input"
-                            placeholder={isCustomer ? "Search by customer name, GSTIN, phone..." : "Search by product name, SKU, HSN..."}
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            style={{ minWidth: "320px" }}
-                        />
+                        <div className="search-input-wrapper" style={{ minWidth: "280px", maxWidth: "420px", flex: 1 }}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="11" cy="11" r="8" />
+                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input
+                                type="text"
+                                className="search-input"
+                                placeholder={isCustomer ? "Search by customer name, GSTIN, phone..." : "Search by product name, SKU, HSN..."}
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                            />
+                        </div>
                         <select
                             className="form-control"
                             value={filterType}
                             onChange={e => setFilterType(e.target.value)}
-                            style={{ width: "160px" }}
+                            style={{ width: "170px", height: "38px" }}
                         >
                             {isCustomer ? (
                                 <>
@@ -578,129 +559,145 @@ export default function ManageData({ kind }) {
                             )}
                         </select>
                     </div>
-                    <span style={{ fontSize: "13px", color: "var(--muted)" }}>
+                    <span style={{ fontSize: "13px", color: "var(--text-muted)", fontWeight: 500 }}>
                         Showing {filteredItems.length} records
                     </span>
                 </div>
-            </div>
 
-            {/* Items Table */}
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-                {loading ? (
-                    <div style={{ padding: "40px", textAlign: "center" }}>
-                        <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                        <p>Loading records...</p>
-                    </div>
-                ) : filteredItems.length === 0 ? (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
-                        <p>No records found matching filters.</p>
-                    </div>
-                ) : isCustomer ? (
-                    <table className="table" style={{ width: "100%", margin: 0 }}>
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Type</th>
-                                <th>GSTIN</th>
-                                <th>State</th>
-                                <th>Phone</th>
-                                <th>Email</th>
-                                <th style={{ textAlign: "center" }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredItems.map(c => (
-                                <tr key={c.id}>
-                                    <td style={{ fontWeight: "600" }}>{c.name}</td>
-                                    <td><span className="badge">{c.customerType || "B2B"}</span></td>
-                                    <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{c.gstin || "Unregistered"}</td>
-                                    <td>{c.state}</td>
-                                    <td>{c.phone || "-"}</td>
-                                    <td>{c.email || "-"}</td>
-                                    <td style={{ textAlign: "center" }}>
-                                        <div style={{ display: "inline-flex", gap: "6px" }}>
-                                            <button
-                                                className="btn btn-secondary btn-sm"
-                                                style={{ padding: "3px 8px", fontSize: "11px" }}
-                                                onClick={() => handleViewCustomerDetails(c.id)}
-                                            >
-                                                Ledger & History
-                                            </button>
-                                            <button
-                                                className="btn btn-danger btn-sm"
-                                                style={{ padding: "3px 8px", fontSize: "11px" }}
-                                                onClick={() => handleDelete(c.id)}
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
+                {/* Items Table */}
+                <div className="table-container">
+                    {loading ? (
+                        <div style={{ padding: "40px", textAlign: "center" }}>
+                            <div className="spinner" style={{ margin: "0 auto 12px" }} />
+                            <p>Loading records...</p>
+                        </div>
+                    ) : filteredItems.length === 0 ? (
+                        <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
+                            <p>No records found matching filters.</p>
+                        </div>
+                    ) : isCustomer ? (
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Customer Name</th>
+                                    <th>Type</th>
+                                    <th>GSTIN</th>
+                                    <th>State</th>
+                                    <th>Phone</th>
+                                    <th>Email</th>
+                                    <th style={{ textAlign: "right" }}>Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                ) : (
-                    <table className="table" style={{ width: "100%", margin: 0 }}>
-                        <thead>
-                            <tr>
-                                <th>Item Name</th>
-                                <th>Type</th>
-                                <th>SKU / HSN</th>
-                                <th>Unit Price</th>
-                                <th>GST %</th>
-                                <th>Stock</th>
-                                <th style={{ textAlign: "center" }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredItems.map(p => {
-                                const isLowStock = p.productType?.toUpperCase() === "PRODUCT"
-                                    && Number(p.stockQuantity || 0) <= Number(p.lowStockThreshold || 5);
-
-                                return (
-                                    <tr key={p.id}>
-                                        <td style={{ fontWeight: "600" }}>{p.name}</td>
+                            </thead>
+                            <tbody>
+                                {filteredItems.map(c => (
+                                    <tr key={c.id}>
+                                        <td style={{ fontWeight: "600" }}>{c.name}</td>
                                         <td>
-                                            <span className="badge" style={{
-                                                background: p.productType === "SERVICE" ? "rgba(99,102,241,0.15)" : "rgba(16,185,129,0.15)",
-                                                color: p.productType === "SERVICE" ? "#4338ca" : "#065f46"
-                                            }}>
-                                                {p.productType || "PRODUCT"}
+                                            <span className="badge" style={{ backgroundColor: "#e0f2fe", color: "#0369a1" }}>
+                                                {c.customerType || "B2B"}
                                             </span>
                                         </td>
-                                        <td style={{ fontFamily: "monospace", fontSize: "12px" }}>
-                                            {p.sku ? `${p.sku} / ` : ""}{p.hsnCode || "-"}
+                                        <td style={{ letterSpacing: "0.2px", fontVariantNumeric: "tabular-nums" }}>
+                                            {c.gstin || <span style={{ color: "var(--text-muted)" }}>Unregistered</span>}
                                         </td>
-                                        <td style={{ fontWeight: "600" }}>{fmt(p.price)}</td>
-                                        <td>{p.gstRate}%</td>
-                                        <td>
-                                            {p.productType === "SERVICE" ? (
-                                                <span style={{ color: "var(--muted)" }}>N/A (Service)</span>
-                                            ) : (
-                                                <span style={{
-                                                    color: isLowStock ? "#ef4444" : "inherit",
-                                                    fontWeight: isLowStock ? "700" : "normal"
-                                                }}>
-                                                    {p.stockQuantity || 0} {p.unit || ""}
-                                                    {isLowStock && " ⚠️ Low"}
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td style={{ textAlign: "center" }}>
-                                            <button
-                                                className="btn btn-danger btn-sm"
-                                                style={{ padding: "3px 8px", fontSize: "11px" }}
-                                                onClick={() => handleDelete(p.id)}
-                                            >
-                                                Delete
-                                            </button>
+                                        <td>{c.state}</td>
+                                        <td>{c.phone || "—"}</td>
+                                        <td>{c.email || "—"}</td>
+                                        <td style={{ textAlign: "right" }}>
+                                            <div style={{ display: "inline-flex", gap: "8px", justifyContent: "flex-end" }}>
+                                                <button
+                                                    type="button"
+                                                    className="action-btn-sm"
+                                                    onClick={() => handleViewCustomerDetails(c.id)}
+                                                >
+                                                    Ledger & History
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="action-btn-sm"
+                                                    style={{ color: "var(--danger)" }}
+                                                    onClick={() => handleDelete(c.id, c.name)}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                )}
+                                ))}
+                            </tbody>
+                        </table>
+                    ) : (
+                        <table className="table">
+                            <thead>
+                                <tr>
+                                    <th>Item Name</th>
+                                    <th>Type</th>
+                                    <th>SKU / HSN</th>
+                                    <th style={{ textAlign: "right" }}>Unit Price</th>
+                                    <th style={{ textAlign: "center" }}>GST %</th>
+                                    <th>Stock</th>
+                                    <th style={{ textAlign: "right" }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {filteredItems.map(p => {
+                                    const isLowStock = p.productType?.toUpperCase() === "PRODUCT"
+                                        && Number(p.stockQuantity || 0) <= Number(p.lowStockThreshold || 5);
+
+                                    return (
+                                        <tr key={p.id}>
+                                            <td style={{ fontWeight: "600" }}>{p.name}</td>
+                                            <td>
+                                                <span className="badge" style={{
+                                                    background: p.productType === "SERVICE" ? "rgba(99,102,241,0.12)" : "rgba(16,185,129,0.12)",
+                                                    color: p.productType === "SERVICE" ? "#4338ca" : "#065f46"
+                                                }}>
+                                                    {p.productType || "PRODUCT"}
+                                                </span>
+                                            </td>
+                                            <td style={{ letterSpacing: "0.2px" }}>
+                                                {p.sku ? `${p.sku} / ` : ""}{p.hsnCode || "—"}
+                                            </td>
+                                            <td className="table-num" style={{ textAlign: "right" }}>
+                                                {fmt(p.price)}
+                                            </td>
+                                            <td style={{ textAlign: "center", fontWeight: 600 }}>
+                                                {p.gstRate}%
+                                            </td>
+                                            <td>
+                                                {p.productType === "SERVICE" ? (
+                                                    <span style={{ color: "var(--text-muted)" }}>N/A (Service)</span>
+                                                ) : (
+                                                    <span style={{
+                                                        color: isLowStock ? "#ef4444" : "var(--text-primary)",
+                                                        fontWeight: isLowStock ? 700 : 500
+                                                    }}>
+                                                        {p.stockQuantity || 0} {p.unit || ""}
+                                                        {isLowStock && (
+                                                            <span className="status-badge status-draft" style={{ marginLeft: "6px", fontSize: "10px" }}>
+                                                                Low Stock
+                                                            </span>
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td style={{ textAlign: "right" }}>
+                                                <button
+                                                    type="button"
+                                                    className="action-btn-sm"
+                                                    style={{ color: "var(--danger)" }}
+                                                    onClick={() => handleDelete(p.id, p.name)}
+                                                >
+                                                    Delete
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
             </div>
 
             {/* Customer Details Drawer / Modal */}
@@ -710,7 +707,7 @@ export default function ManageData({ kind }) {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                             <div>
                                 <h3 style={{ margin: 0, fontSize: "18px" }}>{selectedCustomerDetails.customer.name}</h3>
-                                <span style={{ fontSize: "12px", color: "var(--muted)" }}>
+                                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
                                     {selectedCustomerDetails.customer.customerType || "B2B"} | GSTIN: {selectedCustomerDetails.customer.gstin || "Unregistered"} | {selectedCustomerDetails.customer.state}
                                 </span>
                             </div>
@@ -719,7 +716,7 @@ export default function ManageData({ kind }) {
 
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px" }}>
                             <div style={{ background: "var(--bg-subtle, #f8fafc)", padding: "10px", borderRadius: "6px" }}>
-                                <div style={{ fontSize: "11px", color: "var(--muted)" }}>Total Invoiced</div>
+                                <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>Total Invoiced</div>
                                 <div style={{ fontSize: "15px", fontWeight: "700" }}>{fmt(selectedCustomerDetails.totalInvoiced)}</div>
                             </div>
                             <div style={{ background: "rgba(16, 185, 129, 0.1)", padding: "10px", borderRadius: "6px" }}>
@@ -740,36 +737,38 @@ export default function ManageData({ kind }) {
                             Invoice History ({selectedCustomerDetails.invoices ? selectedCustomerDetails.invoices.length : 0})
                         </h4>
                         {(!selectedCustomerDetails.invoices || selectedCustomerDetails.invoices.length === 0) ? (
-                            <p style={{ color: "var(--muted)", fontSize: "13px" }}>No invoices for this customer yet.</p>
+                            <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No invoices for this customer yet.</p>
                         ) : (
-                            <table className="table" style={{ width: "100%", fontSize: "12px" }}>
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Invoice #</th>
-                                        <th style={{ textAlign: "right" }}>Grand Total</th>
-                                        <th style={{ textAlign: "right" }}>Paid</th>
-                                        <th style={{ textAlign: "right" }}>Balance</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {selectedCustomerDetails.invoices.map(inv => (
-                                        <tr key={inv.id}>
-                                            <td>{inv.invoiceDate}</td>
-                                            <td style={{ fontWeight: "600" }}>{inv.invoiceNumber}</td>
-                                            <td style={{ textAlign: "right" }}>{fmt(inv.grandTotal)}</td>
-                                            <td style={{ textAlign: "right", color: "#10b981" }}>{fmt(inv.paidAmount)}</td>
-                                            <td style={{ textAlign: "right", color: "#ef4444", fontWeight: "600" }}>{fmt(inv.balanceAmount)}</td>
-                                            <td><span className={`badge badge-${(inv.status || "DRAFT").toLowerCase()}`}>{inv.status}</span></td>
+                            <div className="table-container">
+                                <table className="table" style={{ fontSize: "12px" }}>
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Invoice #</th>
+                                            <th style={{ textAlign: "right" }}>Grand Total</th>
+                                            <th style={{ textAlign: "right" }}>Paid</th>
+                                            <th style={{ textAlign: "right" }}>Balance</th>
+                                            <th>Status</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {selectedCustomerDetails.invoices.map(inv => (
+                                            <tr key={inv.id}>
+                                                <td>{inv.invoiceDate}</td>
+                                                <td style={{ fontWeight: "600", color: "var(--primary)" }}>{inv.invoiceNumber}</td>
+                                                <td className="table-num" style={{ textAlign: "right" }}>{fmt(inv.grandTotal)}</td>
+                                                <td className="table-num" style={{ textAlign: "right", color: "var(--success)" }}>{fmt(inv.paidAmount)}</td>
+                                                <td className="table-num" style={{ textAlign: "right", color: "var(--danger)", fontWeight: 600 }}>{fmt(inv.balanceAmount)}</td>
+                                                <td><span className={`status-badge status-${(inv.status || "DRAFT").toLowerCase()}`}>{inv.status}</span></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         )}
 
                         <div style={{ textAlign: "right", marginTop: "16px" }}>
-                            <button className="btn btn-secondary" onClick={() => setSelectedCustomerDetails(null)}>Close</button>
+                            <button className="primary-button" onClick={() => setSelectedCustomerDetails(null)}>Close</button>
                         </div>
                     </div>
                 </div>

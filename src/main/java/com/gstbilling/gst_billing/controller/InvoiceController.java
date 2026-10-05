@@ -8,6 +8,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,12 +27,14 @@ public class InvoiceController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES')")
     public ResponseEntity<Invoice> createInvoice(@RequestBody Invoice invoice) {
         Invoice created = invoiceService.createInvoice(invoice);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES', 'VIEWER', 'SUPPORT')")
     public List<Invoice> getAllInvoices(
             @RequestParam(required = false) String status,
             @RequestParam(required = false) Long customerId
@@ -43,37 +46,52 @@ public class InvoiceController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES', 'VIEWER', 'SUPPORT')")
     public Invoice getInvoiceById(@PathVariable Long id) {
         return invoiceService.getInvoiceById(id);
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES')")
     public Invoice updateDraftInvoice(@PathVariable Long id, @RequestBody Invoice invoice) {
         return invoiceService.updateDraftInvoice(id, invoice);
     }
 
     @PutMapping("/{id}/issue")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES')")
     public Invoice issueInvoice(@PathVariable Long id) {
         return invoiceService.issueInvoice(id);
     }
 
     @PutMapping("/{id}/sent")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES')")
     public Invoice markAsSent(@PathVariable Long id) {
         return invoiceService.markAsSent(id);
     }
 
     @PutMapping("/{id}/cancel")
-    public Invoice cancelInvoice(@PathVariable Long id) {
-        return invoiceService.cancelInvoice(id);
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT')")
+    public Invoice cancelInvoice(
+            @PathVariable Long id,
+            @RequestParam(required = false) String reason
+    ) {
+        return invoiceService.cancelInvoice(id, reason);
+    }
+
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT')")
+    public Invoice cancelInvoice(Long id) {
+        return cancelInvoice(id, (String) null);
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT')")
     public ResponseEntity<Void> deleteInvoice(@PathVariable Long id) {
         invoiceService.deleteInvoice(id);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/pdf")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES', 'VIEWER', 'SUPPORT')")
     public ResponseEntity<byte[]> getInvoicePdf(@PathVariable Long id) {
         byte[] pdfBytes = invoicePdfService.generateInvoicePdf(id);
         Invoice invoice = invoiceService.getInvoiceById(id);
@@ -88,11 +106,13 @@ public class InvoiceController {
     }
 
     @GetMapping("/{id}/reminder")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES', 'VIEWER', 'SUPPORT')")
     public ReminderResponse getReminder(@PathVariable Long id) {
         return invoiceService.getReminderDetails(id);
     }
 
     @PostMapping("/{id}/remind-email")
+    @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES')")
     public ReminderResponse sendEmailReminder(
             @PathVariable Long id,
             @RequestBody(required = false) Map<String, String> body
