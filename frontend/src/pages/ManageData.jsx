@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Icon from "../components/Icon";
 import {
     createCustomer,
     createProduct,
@@ -12,7 +13,7 @@ import {
 const GST_RATES = [0, 5, 12, 18, 28];
 const COMMON_UNITS = ["PCS", "NOS", "KGS", "MTR", "BOX", "SET", "LTR", "PKT", "BAG"];
 
-export default function ManageData({ kind }) {
+export default function ManageData({ kind, onViewCustomer }) {
     const isCustomer = kind === "customers";
 
     const [items, setItems] = useState([]);
@@ -23,6 +24,7 @@ export default function ManageData({ kind }) {
     const [success, setSuccess] = useState("");
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [showForm, setShowForm] = useState(false);
 
     // Customer Details modal
     const [selectedCustomerDetails, setSelectedCustomerDetails] = useState(null);
@@ -218,6 +220,15 @@ export default function ManageData({ kind }) {
                             : "Define catalog items, HSN/SAC codes, standard GST rates, and inventory stock."}
                     </p>
                 </div>
+                <button
+                    type="button"
+                    className={showForm ? "secondary-button" : "primary-button"}
+                    onClick={() => setShowForm(!showForm)}
+                    style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+                >
+                    {showForm ? <Icon type="close" size={14} /> : <Icon type="plus" size={14} />}
+                    <span>{showForm ? "Hide Form" : isCustomer ? "Add New Customer" : "Add New Item"}</span>
+                </button>
             </div>
 
             {/* Error & Success Banners */}
@@ -227,298 +238,352 @@ export default function ManageData({ kind }) {
                 </div>
             )}
             {success && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.12)", color: "#065f46", borderRadius: "var(--radius-sm)", border: "1px solid #a7f3d0", fontWeight: 600 }}>
-                    ✓ {success}
+                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.12)", color: "#065f46", borderRadius: "var(--radius-sm)", border: "1px solid #a7f3d0", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Icon type="checkCircle" size={16} color="#065f46" /> {success}
                 </div>
             )}
 
-            {/* Creation Form Card */}
-            <div className="form-card">
-                <div className="form-card-title">
-                    <span style={{ fontSize: "18px", color: "var(--primary)" }}>+</span>
-                    {isCustomer ? "Add New Customer / Business Client" : "Add New Product / Service"}
-                </div>
+            {/* Creation Form Card (Toggleable) */}
+            {showForm && (
+                <div className="form-card" style={{ animation: "fadeIn 0.2s ease" }}>
+                    <div className="form-card-title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <Icon type="plus" size={16} color="var(--primary)" />
+                        {isCustomer ? "Add New Customer / Business Client" : "Add New Product / Service"}
+                    </div>
 
-                <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
-                    {/* CUSTOMER FORM FIELDS */}
-                    {isCustomer && (
-                        <>
-                            <div className="form-grid-4">
-                                <div className="form-field col-span-2">
-                                    <label>Customer / Company Name <span className="req-star">*</span></label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        value={form.name || ""}
-                                        onChange={e => handleInputChange("name", e.target.value)}
-                                        placeholder="e.g. Apex Enterprises Pvt Ltd"
-                                        required
-                                    />
+                    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+                        {/* CUSTOMER FORM FIELDS */}
+                        {isCustomer && (
+                            <>
+                                {/* Section 1: Basic Profile & Classification */}
+                                <div className="form-section-divider">
+                                    <h4 className="form-section-title">1. Basic Profile & Customer Classification</h4>
+                                    <span className="form-section-subtitle">Legal business identity and trading classification</span>
                                 </div>
-                                <div className="form-field">
-                                    <label>Customer Type <span className="req-star">*</span></label>
-                                    <select
-                                        className="form-control"
-                                        value={form.customerType || "B2B"}
-                                        onChange={e => handleInputChange("customerType", e.target.value)}
-                                    >
-                                        <option value="B2B">B2B (Registered Business)</option>
-                                        <option value="B2C">B2C (Consumer / Unregistered)</option>
-                                        <option value="EXPORT">EXPORT (Overseas)</option>
-                                    </select>
+                                <div className="form-grid-4">
+                                    <div className="form-field col-span-2">
+                                        <label>Customer / Legal Company Name <span className="req-star">*</span></label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={form.name || ""}
+                                            onChange={e => handleInputChange("name", e.target.value)}
+                                            placeholder="e.g. Apex Enterprises Pvt Ltd"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Customer Type <span className="req-star">*</span></label>
+                                        <select
+                                            className="form-control"
+                                            value={form.customerType || "B2B"}
+                                            onChange={e => handleInputChange("customerType", e.target.value)}
+                                        >
+                                            <option value="B2B">B2B (Registered Business)</option>
+                                            <option value="B2C">B2C (Consumer / Unregistered)</option>
+                                            <option value="EXPORT">EXPORT (Overseas / SEZ)</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Payment Terms (Days)</label>
+                                        <input
+                                            type="number"
+                                            className="form-control"
+                                            value={form.paymentTerms || "15"}
+                                            onChange={e => handleInputChange("paymentTerms", e.target.value)}
+                                            placeholder="15"
+                                        />
+                                    </div>
                                 </div>
-                                <div className="form-field">
-                                    <label>Credit Terms (Days)</label>
-                                    <input
-                                        type="number"
-                                        className="form-control"
-                                        value={form.paymentTerms || "15"}
-                                        onChange={e => handleInputChange("paymentTerms", e.target.value)}
-                                        placeholder="15"
-                                    />
-                                </div>
-                            </div>
 
-                            <div className="form-grid-4">
-                                <div className="form-field">
-                                    <label>GSTIN (15 Digits)</label>
-                                    <input
-                                        type="text"
-                                        maxLength="15"
-                                        className="form-control"
-                                        value={form.gstin || ""}
-                                        onChange={e => handleInputChange("gstin", e.target.value.toUpperCase())}
-                                        placeholder="e.g. 27AABCT3518Q1ZV"
-                                    />
+                                {/* Section 2: Tax Identification & Place of Supply */}
+                                <div className="form-section-divider">
+                                    <h4 className="form-section-title">2. Tax Identification & Place of Supply</h4>
+                                    <span className="form-section-subtitle">GSTIN, PAN and official State of registration</span>
                                 </div>
-                                <div className="form-field">
-                                    <label>PAN Number</label>
-                                    <input
-                                        type="text"
-                                        maxLength="10"
-                                        className="form-control"
-                                        value={form.pan || ""}
-                                        onChange={e => handleInputChange("pan", e.target.value.toUpperCase())}
-                                        placeholder="e.g. AABCT3518Q"
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Phone Number (WhatsApp)</label>
-                                    <input
-                                        type="tel"
-                                        className="form-control"
-                                        value={form.phone || ""}
-                                        onChange={e => handleInputChange("phone", e.target.value)}
-                                        placeholder="e.g. 9876543210"
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Email Address</label>
-                                    <input
-                                        type="email"
-                                        className="form-control"
-                                        value={form.email || ""}
-                                        onChange={e => handleInputChange("email", e.target.value)}
-                                        placeholder="billing@customer.com"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="form-grid-4">
-                                <div className="form-field col-span-2">
-                                    <label>State / Place of Supply <span className="req-star">*</span></label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        value={form.state || ""}
-                                        onChange={e => handleInputChange("state", e.target.value)}
-                                        placeholder="e.g. Maharashtra"
-                                        required
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>State Code</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        value={form.stateCode || ""}
-                                        onChange={e => handleInputChange("stateCode", e.target.value)}
-                                        placeholder="27"
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Credit Limit (₹)</label>
-                                    <input
-                                        type="number"
-                                        className="form-control"
-                                        value={form.creditLimit || "0"}
-                                        onChange={e => handleInputChange("creditLimit", e.target.value)}
-                                        placeholder="0.00"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="form-grid-2">
-                                <div className="form-field">
-                                    <label>Billing Address</label>
-                                    <textarea
-                                        className="form-control"
-                                        rows="2"
-                                        value={form.billingAddress || ""}
-                                        onChange={e => handleInputChange("billingAddress", e.target.value)}
-                                        placeholder="Registered corporate address"
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Shipping Address (Optional)</label>
-                                    <textarea
-                                        className="form-control"
-                                        rows="2"
-                                        value={form.shippingAddress || ""}
-                                        onChange={e => handleInputChange("shippingAddress", e.target.value)}
-                                        placeholder="Warehouse or delivery destination"
-                                    />
-                                </div>
-                            </div>
-                        </>
-                    )}
-
-                    {/* PRODUCT FORM FIELDS */}
-                    {!isCustomer && (
-                        <>
-                            <div className="form-grid-4">
-                                <div className="form-field col-span-2">
-                                    <label>Item / Product Name <span className="req-star">*</span></label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        value={form.name || ""}
-                                        onChange={e => handleInputChange("name", e.target.value)}
-                                        placeholder="e.g. Dell Monitor 27-inch 4K or IT Consulting"
-                                        required
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Type <span className="req-star">*</span></label>
-                                    <select
-                                        className="form-control"
-                                        value={form.productType || "PRODUCT"}
-                                        onChange={e => handleInputChange("productType", e.target.value)}
-                                    >
-                                        <option value="PRODUCT">Goods (Physical Product)</option>
-                                        <option value="SERVICE">Service (Non-stock)</option>
-                                    </select>
-                                </div>
-                                <div className="form-field">
-                                    <label>SKU / Part Code</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        value={form.sku || ""}
-                                        onChange={e => handleInputChange("sku", e.target.value)}
-                                        placeholder="e.g. DELL-27-4K"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="form-grid-4">
-                                <div className="form-field">
-                                    <label>HSN / SAC Code</label>
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        value={form.hsnCode || ""}
-                                        onChange={e => handleInputChange("hsnCode", e.target.value)}
-                                        placeholder="e.g. 8471 or 9983"
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Unit Price (₹) <span className="req-star">*</span></label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        className="form-control"
-                                        value={form.price || ""}
-                                        onChange={e => handleInputChange("price", e.target.value)}
-                                        placeholder="0.00"
-                                        required
-                                    />
-                                </div>
-                                <div className="form-field">
-                                    <label>Standard GST Rate <span className="req-star">*</span></label>
-                                    <select
-                                        className="form-control"
-                                        value={form.gstRate || 18}
-                                        onChange={e => handleInputChange("gstRate", Number(e.target.value))}
-                                    >
-                                        {GST_RATES.map(r => (
-                                             <option key={r} value={r}>{r}% GST</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="form-field">
-                                    <label>Unit of Measurement</label>
-                                    <select
-                                        className="form-control"
-                                        value={form.unit || "PCS"}
-                                        onChange={e => handleInputChange("unit", e.target.value)}
-                                    >
-                                        {COMMON_UNITS.map(u => (
-                                            <option key={u} value={u}>{u}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            </div>
-
-                            {form.productType === "PRODUCT" && (
                                 <div className="form-grid-4">
                                     <div className="form-field">
-                                        <label>Initial Stock Quantity</label>
+                                        <label>GSTIN (15 Digits)</label>
                                         <input
-                                            type="number"
-                                            step="1"
+                                            type="text"
+                                            maxLength="15"
                                             className="form-control"
-                                            value={form.stockQuantity || "0"}
-                                            onChange={e => handleInputChange("stockQuantity", e.target.value)}
-                                            placeholder="100"
+                                            value={form.gstin || ""}
+                                            onChange={e => handleInputChange("gstin", e.target.value.toUpperCase())}
+                                            placeholder="e.g. 27AABCT3518Q1ZV"
                                         />
                                     </div>
                                     <div className="form-field">
-                                        <label>Low-stock Alert Threshold</label>
+                                        <label>PAN Number (10 Digits)</label>
                                         <input
-                                            type="number"
-                                            step="1"
+                                            type="text"
+                                            maxLength="10"
                                             className="form-control"
-                                            value={form.lowStockThreshold || "5"}
-                                            onChange={e => handleInputChange("lowStockThreshold", e.target.value)}
-                                            placeholder="10"
+                                            value={form.pan || ""}
+                                            onChange={e => handleInputChange("pan", e.target.value.toUpperCase())}
+                                            placeholder="e.g. AABCT3518Q"
                                         />
                                     </div>
-                                    <div className="form-field col-span-2" style={{ justifyContent: "center" }}>
-                                        <label className="form-checkbox-wrap">
-                                            <input
-                                                type="checkbox"
-                                                checked={Boolean(form.taxInclusive)}
-                                                onChange={e => handleInputChange("taxInclusive", e.target.checked)}
-                                            />
-                                            <span>Price is Tax-Inclusive</span>
-                                        </label>
+                                    <div className="form-field">
+                                        <label>State / Place of Supply <span className="req-star">*</span></label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={form.state || ""}
+                                            onChange={e => handleInputChange("state", e.target.value)}
+                                            placeholder="e.g. Maharashtra"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>State Code (2 Digits)</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={form.stateCode || ""}
+                                            onChange={e => handleInputChange("stateCode", e.target.value)}
+                                            placeholder="27"
+                                        />
                                     </div>
                                 </div>
-                            )}
-                        </>
-                    )}
 
-                    <div className="form-actions-bar">
-                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                            * Indicates mandatory fields for GST compliance
-                        </span>
-                        <button type="submit" className="primary-button" disabled={saving}>
-                            {saving ? "Saving..." : isCustomer ? "Save Customer" : "Save Product"}
-                        </button>
-                    </div>
-                </form>
-            </div>
+                                {/* Section 3: Contact & Financial Limits */}
+                                <div className="form-section-divider">
+                                    <h4 className="form-section-title">3. Contact Details & Credit Ledger</h4>
+                                    <span className="form-section-subtitle">Primary billing email, phone, and credit controls</span>
+                                </div>
+                                <div className="form-grid-4">
+                                    <div className="form-field">
+                                        <label>Phone Number (WhatsApp)</label>
+                                        <input
+                                            type="tel"
+                                            className="form-control"
+                                            value={form.phone || ""}
+                                            onChange={e => handleInputChange("phone", e.target.value)}
+                                            placeholder="e.g. 9876543210"
+                                        />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Billing Email Address</label>
+                                        <input
+                                            type="email"
+                                            className="form-control"
+                                            value={form.email || ""}
+                                            onChange={e => handleInputChange("email", e.target.value)}
+                                            placeholder="billing@customer.com"
+                                        />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Credit Limit (₹)</label>
+                                        <input
+                                            type="number"
+                                            className="form-control"
+                                            value={form.creditLimit || "0"}
+                                            onChange={e => handleInputChange("creditLimit", e.target.value)}
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Opening Balance (₹)</label>
+                                        <input
+                                            type="number"
+                                            className="form-control"
+                                            value={form.openingBalance || "0"}
+                                            onChange={e => handleInputChange("openingBalance", e.target.value)}
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Section 4: Registered Addresses */}
+                                <div className="form-section-divider">
+                                    <h4 className="form-section-title">4. Registered Addresses</h4>
+                                    <span className="form-section-subtitle">Tax invoice billing address and delivery destination</span>
+                                </div>
+                                <div className="form-grid-2">
+                                    <div className="form-field">
+                                        <label>Registered Billing Address</label>
+                                        <textarea
+                                            className="form-control"
+                                            rows="2"
+                                            value={form.billingAddress || ""}
+                                            onChange={e => handleInputChange("billingAddress", e.target.value)}
+                                            placeholder="Registered corporate address for tax invoice"
+                                        />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Shipping / Delivery Address (Optional)</label>
+                                        <textarea
+                                            className="form-control"
+                                            rows="2"
+                                            value={form.shippingAddress || ""}
+                                            onChange={e => handleInputChange("shippingAddress", e.target.value)}
+                                            placeholder="Warehouse or delivery destination (if different)"
+                                        />
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        {/* PRODUCT FORM FIELDS */}
+                        {!isCustomer && (
+                            <>
+                                {/* Section 1: Item Identification */}
+                                <div className="form-section-divider">
+                                    <h4 className="form-section-title">1. Item Identification & Classification</h4>
+                                    <span className="form-section-subtitle">Catalog name, type, SKU code, and GST HSN/SAC</span>
+                                </div>
+                                <div className="form-grid-4">
+                                    <div className="form-field col-span-2">
+                                        <label>Item / Product Name <span className="req-star">*</span></label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={form.name || ""}
+                                            onChange={e => handleInputChange("name", e.target.value)}
+                                            placeholder="e.g. Dell Monitor 27-inch 4K or IT Consulting"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Classification Type <span className="req-star">*</span></label>
+                                        <select
+                                            className="form-control"
+                                            value={form.productType || "PRODUCT"}
+                                            onChange={e => handleInputChange("productType", e.target.value)}
+                                        >
+                                            <option value="PRODUCT">Goods (Physical Product)</option>
+                                            <option value="SERVICE">Service (Non-stock)</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-field">
+                                        <label>SKU / Part Code</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={form.sku || ""}
+                                            onChange={e => handleInputChange("sku", e.target.value)}
+                                            placeholder="e.g. DELL-27-4K"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Section 2: Pricing & Taxation */}
+                                <div className="form-section-divider">
+                                    <h4 className="form-section-title">2. Pricing & GST Taxation</h4>
+                                    <span className="form-section-subtitle">Tax rates, measurement units, and price settings</span>
+                                </div>
+                                <div className="form-grid-4">
+                                    <div className="form-field">
+                                        <label>HSN / SAC Code</label>
+                                        <input
+                                            type="text"
+                                            className="form-control"
+                                            value={form.hsnCode || ""}
+                                            onChange={e => handleInputChange("hsnCode", e.target.value)}
+                                            placeholder="e.g. 8471 or 9983"
+                                        />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Unit Base Price (₹) <span className="req-star">*</span></label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="form-control"
+                                            value={form.price || ""}
+                                            onChange={e => handleInputChange("price", e.target.value)}
+                                            placeholder="0.00"
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Standard GST Rate <span className="req-star">*</span></label>
+                                        <select
+                                            className="form-control"
+                                            value={form.gstRate || 18}
+                                            onChange={e => handleInputChange("gstRate", Number(e.target.value))}
+                                        >
+                                            {GST_RATES.map(r => (
+                                                <option key={r} value={r}>{r}% GST</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="form-field">
+                                        <label>Unit of Measurement</label>
+                                        <select
+                                            className="form-control"
+                                            value={form.unit || "PCS"}
+                                            onChange={e => handleInputChange("unit", e.target.value)}
+                                        >
+                                            {COMMON_UNITS.map(u => (
+                                                <option key={u} value={u}>{u}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Section 3: Inventory & Stock Control (For physical goods) */}
+                                {form.productType === "PRODUCT" && (
+                                    <>
+                                        <div className="form-section-divider">
+                                            <h4 className="form-section-title">3. Inventory & Stock Tracking</h4>
+                                            <span className="form-section-subtitle">Initial warehouse counts and low stock warning thresholds</span>
+                                        </div>
+                                        <div className="form-grid-4">
+                                            <div className="form-field">
+                                                <label>Initial Stock Quantity</label>
+                                                <input
+                                                    type="number"
+                                                    step="1"
+                                                    className="form-control"
+                                                    value={form.stockQuantity || "0"}
+                                                    onChange={e => handleInputChange("stockQuantity", e.target.value)}
+                                                    placeholder="100"
+                                                />
+                                            </div>
+                                            <div className="form-field">
+                                                <label>Low-stock Alert Threshold</label>
+                                                <input
+                                                    type="number"
+                                                    step="1"
+                                                    className="form-control"
+                                                    value={form.lowStockThreshold || "5"}
+                                                    onChange={e => handleInputChange("lowStockThreshold", e.target.value)}
+                                                    placeholder="10"
+                                                />
+                                            </div>
+                                            <div className="form-field col-span-2" style={{ justifyContent: "center" }}>
+                                                <label className="form-checkbox-wrap">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={Boolean(form.taxInclusive)}
+                                                        onChange={e => handleInputChange("taxInclusive", e.target.checked)}
+                                                    />
+                                                    <span>Price is Tax-Inclusive</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </>
+                        )}
+
+                        <div className="form-actions-bar">
+                            <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                                * Indicates mandatory fields for GST compliance
+                            </span>
+                            <div style={{ display: "flex", gap: "10px" }}>
+                                <button type="button" className="secondary-button" onClick={() => setShowForm(false)}>
+                                    Cancel
+                                </button>
+                                <button type="submit" className="primary-button" disabled={saving}>
+                                    {saving ? "Saving..." : isCustomer ? "Save Customer" : "Save Product"}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            )}
 
             {/* List & Search Filter Bar */}
             <div className="table-card">
@@ -536,6 +601,16 @@ export default function ManageData({ kind }) {
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                             />
+                            {search && (
+                                <button
+                                    type="button"
+                                    className="search-clear-btn"
+                                    onClick={() => setSearch("")}
+                                    title="Clear search"
+                                >
+                                    <Icon type="close" size={13} />
+                                </button>
+                            )}
                         </div>
                         <select
                             className="form-control"
@@ -591,7 +666,25 @@ export default function ManageData({ kind }) {
                             <tbody>
                                 {filteredItems.map(c => (
                                     <tr key={c.id}>
-                                        <td style={{ fontWeight: "600" }}>{c.name}</td>
+                                        <td>
+                                            <button
+                                                type="button"
+                                                onClick={() => onViewCustomer ? onViewCustomer(c.id) : handleViewCustomerDetails(c.id)}
+                                                style={{
+                                                    background: "none",
+                                                    border: "none",
+                                                    padding: 0,
+                                                    textAlign: "left",
+                                                    fontWeight: "700",
+                                                    color: "var(--primary)",
+                                                    cursor: "pointer",
+                                                    fontSize: "14px"
+                                                }}
+                                                title="Click to view full customer profile, orders & ledger"
+                                            >
+                                                {c.name}
+                                            </button>
+                                        </td>
                                         <td>
                                             <span className="badge" style={{ backgroundColor: "#e0f2fe", color: "#0369a1" }}>
                                                 {c.customerType || "B2B"}
@@ -608,9 +701,10 @@ export default function ManageData({ kind }) {
                                                 <button
                                                     type="button"
                                                     className="action-btn-sm"
-                                                    onClick={() => handleViewCustomerDetails(c.id)}
+                                                    onClick={() => onViewCustomer ? onViewCustomer(c.id) : handleViewCustomerDetails(c.id)}
+                                                    title="View full customer profile, orders and ledger"
                                                 >
-                                                    Ledger & History
+                                                    View Profile
                                                 </button>
                                                 <button
                                                     type="button"
@@ -711,7 +805,7 @@ export default function ManageData({ kind }) {
                                     {selectedCustomerDetails.customer.customerType || "B2B"} | GSTIN: {selectedCustomerDetails.customer.gstin || "Unregistered"} | {selectedCustomerDetails.customer.state}
                                 </span>
                             </div>
-                            <button className="btn-close" onClick={() => setSelectedCustomerDetails(null)}>✕</button>
+                            <button type="button" className="modal-close-btn" onClick={() => setSelectedCustomerDetails(null)}><Icon type="close" size={14} /></button>
                         </div>
 
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "20px" }}>
@@ -767,8 +861,21 @@ export default function ManageData({ kind }) {
                             </div>
                         )}
 
-                        <div style={{ textAlign: "right", marginTop: "16px" }}>
-                            <button className="primary-button" onClick={() => setSelectedCustomerDetails(null)}>Close</button>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px" }}>
+                            {onViewCustomer ? (
+                                <button
+                                    type="button"
+                                    className="secondary-button"
+                                    onClick={() => {
+                                        const id = selectedCustomerDetails.customer.id;
+                                        setSelectedCustomerDetails(null);
+                                        onViewCustomer(id);
+                                    }}
+                                >
+                                    Open Full 360° Profile Page →
+                                </button>
+                            ) : <div />}
+                            <button type="button" className="primary-button" onClick={() => setSelectedCustomerDetails(null)}>Close</button>
                         </div>
                     </div>
                 </div>

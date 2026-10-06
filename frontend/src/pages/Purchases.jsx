@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Icon from "../components/Icon";
 import { getPurchases, createPurchase, deletePurchase, recordPurchasePayment, getSuppliers, getProducts } from "../services/api";
 
 export default function Purchases() {
@@ -178,14 +179,14 @@ export default function Purchases() {
             </div>
 
             {suppliers.length === 0 && (
-                <div style={{ padding: "12px 16px", background: "rgba(245, 158, 11, 0.15)", color: "#b45309", borderRadius: "8px" }}>
-                    ⚠️ No suppliers configured yet. Please add a supplier first before recording purchases.
+                <div style={{ padding: "12px 16px", background: "rgba(245, 158, 11, 0.15)", color: "#b45309", borderRadius: "8px", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Icon type="warning" size={16} color="#b45309" /> No suppliers configured yet. Please add a supplier first before recording purchases.
                 </div>
             )}
 
             {successMessage && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600" }}>
-                    ✓ {successMessage}
+                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Icon type="checkCircle" size={16} color="#065f46" /> {successMessage}
                 </div>
             )}
 
@@ -283,7 +284,7 @@ export default function Purchases() {
                     <div className="modal-card" style={{ maxWidth: "800px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                             <h3 style={{ margin: 0, fontSize: "18px" }}>Record Inward Purchase Bill</h3>
-                            <button className="btn-close" onClick={() => setShowModal(false)}>✕</button>
+                            <button className="btn-close" onClick={() => setShowModal(false)}><Icon type="close" size={14} /></button>
                         </div>
 
                         {modalError && (
@@ -437,8 +438,9 @@ export default function Purchases() {
                                                 className="btn btn-danger btn-sm"
                                                 onClick={() => removeItemRow(idx)}
                                                 disabled={items.length === 1}
+                                                title="Remove item"
                                             >
-                                                ✕
+                                                <Icon type="trash" size={12} />
                                             </button>
                                         </div>
                                     ))}
@@ -464,7 +466,7 @@ export default function Purchases() {
                     <div className="modal-card" style={{ maxWidth: "450px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
                             <h3 style={{ margin: 0, fontSize: "18px" }}>Pay Vendor Bill</h3>
-                            <button className="btn-close" onClick={() => setPayModalPurchase(null)}>✕</button>
+                            <button className="btn-close" onClick={() => setPayModalPurchase(null)}><Icon type="close" size={14} /></button>
                         </div>
                         <form onSubmit={handleRecordPayment} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                             <div>

@@ -121,21 +121,23 @@ public class CustomerService {
         LocalDate today = LocalDate.now();
 
         for (Invoice inv : customerInvoices) {
-            if ("CANCELLED".equalsIgnoreCase(inv.getStatus())) {
+            if ("CANCELLED".equalsIgnoreCase(inv.getStatus()) || "DRAFT".equalsIgnoreCase(inv.getStatus())) {
                 continue;
             }
 
             BigDecimal grandTotal = inv.getGrandTotal() != null ? inv.getGrandTotal() : BigDecimal.ZERO;
-            totalInvoiced = totalInvoiced.add(grandTotal);
+            BigDecimal paid = inv.getPaidAmount() != null ? inv.getPaidAmount() : BigDecimal.ZERO;
+            BigDecimal balance = inv.getBalanceAmount() != null ? inv.getBalanceAmount() : grandTotal.subtract(paid);
 
-            if ("PAID".equalsIgnoreCase(inv.getStatus())) {
-                totalPaid = totalPaid.add(grandTotal);
-            } else {
+            totalInvoiced = totalInvoiced.add(grandTotal);
+            totalPaid = totalPaid.add(paid);
+
+            if (balance.compareTo(BigDecimal.ZERO) > 0) {
                 pendingCount++;
                 // Check if overdue: dueDate past or invoiceDate + 30 days
-                LocalDate due = inv.getInvoiceDate() != null ? inv.getInvoiceDate().plusDays(30) : today;
+                LocalDate due = inv.getDueDate() != null ? inv.getDueDate() : (inv.getInvoiceDate() != null ? inv.getInvoiceDate().plusDays(30) : today);
                 if (due.isBefore(today)) {
-                    overdueAmount = overdueAmount.add(grandTotal);
+                    overdueAmount = overdueAmount.add(balance);
                 }
             }
         }

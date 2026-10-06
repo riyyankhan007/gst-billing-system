@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import Icon from "../components/Icon";
 import dashboardLaptopImg from "../assets/gst-dashboard-laptop.jpg";
 
 export default function LandingPage({ onLogin, onRegister }) {
@@ -56,9 +57,10 @@ export default function LandingPage({ onLogin, onRegister }) {
                         <button
                             type="button"
                             className="landing-btn-primary"
+                            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                             onClick={onRegister}
                         >
-                            Get Started Free →
+                            Get Started Free <Icon type="arrowRight" size={14} />
                         </button>
                     </div>
                 </div>
@@ -123,15 +125,15 @@ export default function LandingPage({ onLogin, onRegister }) {
 
                     <div className="landing-hero-trust">
                         <div className="trust-item">
-                            <span className="trust-icon">✓</span>
+                            <span className="trust-icon"><Icon type="check" size={14} color="#10b981" /></span>
                             <span>100% GST & E-Way Ready</span>
                         </div>
                         <div className="trust-item">
-                            <span className="trust-icon">✓</span>
+                            <span className="trust-icon"><Icon type="check" size={14} color="#10b981" /></span>
                             <span>Multi-Tenant Data Isolation</span>
                         </div>
                         <div className="trust-item">
-                            <span className="trust-icon">✓</span>
+                            <span className="trust-icon"><Icon type="check" size={14} color="#10b981" /></span>
                             <span>Instant WhatsApp Reminders</span>
                         </div>
                     </div>
@@ -151,7 +153,7 @@ export default function LandingPage({ onLogin, onRegister }) {
                 <div className="feature-grid">
                     <div className="feature-card">
                         <div className="feature-icon" style={{ background: "rgba(37, 99, 235, 0.1)", color: "#2563eb" }}>
-                            ⚡
+                            <Icon type="zap" size={24} />
                         </div>
                         <h3>Tax Invoices in 10 Seconds</h3>
                         <p>
@@ -161,7 +163,7 @@ export default function LandingPage({ onLogin, onRegister }) {
 
                     <div className="feature-card">
                         <div className="feature-icon" style={{ background: "rgba(37, 211, 102, 0.1)", color: "#25d366" }}>
-                            📲
+                            <Icon type="whatsapp" size={24} />
                         </div>
                         <h3>WhatsApp & Email Reminders</h3>
                         <p>
@@ -171,7 +173,7 @@ export default function LandingPage({ onLogin, onRegister }) {
 
                     <div className="feature-card">
                         <div className="feature-icon" style={{ background: "rgba(99, 102, 241, 0.1)", color: "#6366f1" }}>
-                            🛡️
+                            <Icon type="shield" size={24} />
                         </div>
                         <h3>Tenant-Level Security & Privacy</h3>
                         <p>
@@ -181,7 +183,7 @@ export default function LandingPage({ onLogin, onRegister }) {
 
                     <div className="feature-card">
                         <div className="feature-icon" style={{ background: "rgba(16, 185, 129, 0.1)", color: "#10b981" }}>
-                            📊
+                            <Icon type="report" size={24} />
                         </div>
                         <h3>Inward Bills & ITC Tracking</h3>
                         <p>
@@ -191,7 +193,7 @@ export default function LandingPage({ onLogin, onRegister }) {
 
                     <div className="feature-card">
                         <div className="feature-icon" style={{ background: "rgba(245, 158, 11, 0.1)", color: "#f59e0b" }}>
-                            📦
+                            <Icon type="inventory" size={24} />
                         </div>
                         <h3>Automated Stock Audit Trail</h3>
                         <p>
@@ -201,7 +203,7 @@ export default function LandingPage({ onLogin, onRegister }) {
 
                     <div className="feature-card">
                         <div className="feature-icon" style={{ background: "rgba(239, 68, 68, 0.1)", color: "#ef4444" }}>
-                            📑
+                            <Icon type="notes" size={24} />
                         </div>
                         <h3>Credit & Debit Notes</h3>
                         <p>
@@ -299,10 +301,10 @@ export default function LandingPage({ onLogin, onRegister }) {
                             <button
                                 type="button"
                                 className="primary-button"
-                                style={{ width: "100%", marginTop: "20px" }}
+                                style={{ width: "100%", marginTop: "20px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                                 onClick={onRegister}
                             >
-                                Generate Real Invoices with This Rate →
+                                Generate Real Invoices with This Rate <Icon type="arrowRight" size={14} />
                             </button>
                         </div>
                     </div>
@@ -371,7 +373,9 @@ export default function LandingPage({ onLogin, onRegister }) {
                         >
                             <div className="faq-question">
                                 <span>{item.q}</span>
-                                <span className="faq-chevron">{activeFaq === idx ? "▲" : "▼"}</span>
+                                <span className="faq-chevron">
+                                    {activeFaq === idx ? <Icon type="chevronUp" size={14} /> : <Icon type="chevronDown" size={14} />}
+                                </span>
                             </div>
                             {activeFaq === idx && <div className="faq-answer">{item.a}</div>}
                         </div>
@@ -389,9 +393,9 @@ export default function LandingPage({ onLogin, onRegister }) {
                             type="button"
                             className="landing-cta-primary"
                             onClick={onRegister}
-                            style={{ background: "#ffffff", color: "#2563eb", boxShadow: "0 8px 20px rgba(0,0,0,0.2)" }}
+                            style={{ background: "#ffffff", color: "#2563eb", boxShadow: "0 8px 20px rgba(0,0,0,0.2)", display: "inline-flex", alignItems: "center", gap: "6px" }}
                         >
-                            Start Free Trial Today →
+                            Start Free Trial Today <Icon type="arrowRight" size={14} />
                         </button>
                         <button
                             type="button"

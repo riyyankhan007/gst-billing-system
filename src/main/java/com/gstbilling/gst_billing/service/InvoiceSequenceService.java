@@ -107,4 +107,58 @@ public class InvoiceSequenceService {
 
         return formattedNumber;
     }
+
+    /**
+     * Generates a concurrency-safe, gapless Credit Note number.
+     * Format: CN/2026-27/0001
+     */
+    @Transactional
+    public String generateNextCreditNoteNumber(Business business, LocalDate noteDate) {
+        String fy = FinancialYearUtil.getFinancialYear(noteDate != null ? noteDate : LocalDate.now());
+        String prefix = "CN";
+
+        InvoiceSequence sequence = sequenceRepository
+                .findByBusinessAndFyAndDocTypeForUpdate(business.getId(), fy, "CREDIT_NOTE")
+                .orElseGet(() -> {
+                    InvoiceSequence newSeq = new InvoiceSequence(business, fy, "CREDIT_NOTE", prefix, 0L);
+                    return sequenceRepository.saveAndFlush(newSeq);
+                });
+
+        long candidateSeq = sequence.getCurrentSequence() + 1;
+        String formattedNumber = String.format("%s/%s/%04d", prefix, fy, candidateSeq);
+
+        sequence.setCurrentSequence(candidateSeq);
+        sequence.setPrefix(prefix);
+        sequence.setUpdatedAt(LocalDateTime.now());
+        sequenceRepository.save(sequence);
+
+        return formattedNumber;
+    }
+
+    /**
+     * Generates a concurrency-safe, gapless Debit Note number.
+     * Format: DN/2026-27/0001
+     */
+    @Transactional
+    public String generateNextDebitNoteNumber(Business business, LocalDate noteDate) {
+        String fy = FinancialYearUtil.getFinancialYear(noteDate != null ? noteDate : LocalDate.now());
+        String prefix = "DN";
+
+        InvoiceSequence sequence = sequenceRepository
+                .findByBusinessAndFyAndDocTypeForUpdate(business.getId(), fy, "DEBIT_NOTE")
+                .orElseGet(() -> {
+                    InvoiceSequence newSeq = new InvoiceSequence(business, fy, "DEBIT_NOTE", prefix, 0L);
+                    return sequenceRepository.saveAndFlush(newSeq);
+                });
+
+        long candidateSeq = sequence.getCurrentSequence() + 1;
+        String formattedNumber = String.format("%s/%s/%04d", prefix, fy, candidateSeq);
+
+        sequence.setCurrentSequence(candidateSeq);
+        sequence.setPrefix(prefix);
+        sequence.setUpdatedAt(LocalDateTime.now());
+        sequenceRepository.save(sequence);
+
+        return formattedNumber;
+    }
 }

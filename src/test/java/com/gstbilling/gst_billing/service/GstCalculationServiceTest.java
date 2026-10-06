@@ -175,8 +175,10 @@ class GstCalculationServiceTest {
 
         // Taxable 100.35 + 18% tax 18.06 = 118.41
         // Rounded grand total = 118.00 -> round-off = -0.41
-        assertEquals(0, new BigDecimal("118.41").compareTo(result.grandTotal()));
+        assertEquals(0, new BigDecimal("118.00").compareTo(result.grandTotal()));
         assertEquals(0, new BigDecimal("-0.41").compareTo(result.roundOffAmount()));
+        assertEquals(0, result.taxableAmount().add(result.totalTax()).add(result.roundOffAmount()).compareTo(result.grandTotal()),
+                "Taxable amount + total tax + round-off must equal grand total exactly");
     }
 
     @Test

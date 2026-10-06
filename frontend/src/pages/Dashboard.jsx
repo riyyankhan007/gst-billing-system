@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Icon from "../components/Icon";
 import { getAnalytics, getDashboardMetrics } from "../services/api";
 
 export default function Dashboard({ onNavigate, onSelectInvoice }) {
@@ -586,9 +587,10 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                         <button
                             type="button"
                             className="btn-link"
+                            style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
                             onClick={() => onNavigate("customers")}
                         >
-                            View Directory →
+                            View Directory <Icon type="arrowRight" size={13} />
                         </button>
                     </div>
 
@@ -652,9 +654,10 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                         <button
                             type="button"
                             className="btn-link"
+                            style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
                             onClick={() => onNavigate("products")}
                         >
-                            View Catalog →
+                            View Catalog <Icon type="arrowRight" size={13} />
                         </button>
                     </div>
 

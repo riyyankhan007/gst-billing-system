@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Icon from "../components/Icon";
 import {
     getBusiness,
     updateBusiness,
@@ -7,7 +8,8 @@ import {
     changePassword,
     getBusinessUsers,
     createBusinessUser,
-    updateUserRole
+    updateUserRole,
+    getAssetUrl
 } from "../services/api";
 
 export default function BusinessSettings() {
@@ -224,9 +226,13 @@ export default function BusinessSettings() {
                     borderRadius: "8px",
                     background: message.type === "success" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
                     color: message.type === "success" ? "#065f46" : "var(--danger)",
-                    fontWeight: "600"
+                    fontWeight: "600",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px"
                 }}>
-                    {message.type === "success" ? "✓ " : "✕ "}{message.text}
+                    <Icon type={message.type === "success" ? "checkCircle" : "xCircle"} size={16} color={message.type === "success" ? "#065f46" : "var(--danger)"} />
+                    <span>{message.text}</span>
                 </div>
             )}
 
@@ -278,7 +284,7 @@ export default function BusinessSettings() {
                     <div style={{ display: "flex", gap: "20px", alignItems: "center", flexWrap: "wrap", borderBottom: "1px solid var(--border)", paddingBottom: "16px" }}>
                         <div style={{ width: "90px", height: "90px", border: "1px dashed var(--border)", borderRadius: "8px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", background: "var(--bg-subtle, #f8fafc)" }}>
                             {business.logo ? (
-                                <img src={business.logo} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                                <img src={getAssetUrl(business.logo)} alt="Logo" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                             ) : (
                                 <span style={{ fontSize: "11px", color: "var(--muted)", textAlign: "center" }}>No Logo</span>
                             )}
@@ -499,7 +505,7 @@ export default function BusinessSettings() {
                         <div style={{ display: "flex", gap: "20px", alignItems: "center" }}>
                             <div style={{ width: "120px", height: "60px", border: "1px dashed var(--border)", borderRadius: "6px", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg-subtle, #f8fafc)" }}>
                                 {business.signature ? (
-                                    <img src={business.signature} alt="Signature" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                                    <img src={getAssetUrl(business.signature)} alt="Signature" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
                                 ) : (
                                     <span style={{ fontSize: "11px", color: "var(--muted)" }}>No Stamp</span>
                                 )}
@@ -652,7 +658,7 @@ export default function BusinessSettings() {
                             <div className="modal-card" style={{ maxWidth: "450px" }}>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
                                     <h3 style={{ margin: 0, fontSize: "18px" }}>Add New Team Member</h3>
-                                    <button className="btn-close" onClick={() => setShowInviteModal(false)}>✕</button>
+                                    <button className="btn-close" onClick={() => setShowInviteModal(false)}><Icon type="close" size={14} /></button>
                                 </div>
                                 <form onSubmit={handleInviteUser} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                                     <div>

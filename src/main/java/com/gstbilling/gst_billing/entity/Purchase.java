@@ -1,5 +1,6 @@
 package com.gstbilling.gst_billing.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
@@ -21,6 +22,7 @@ public class Purchase {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "business_id", nullable = false)
+    @JsonIgnore
     private Business business;
 
     @ManyToOne(fetch = FetchType.LAZY)

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Icon from "../components/Icon";
 import { getSalesReport, getGstReport, getCustomerReport, getProductReport, downloadExportCsv } from "../services/api";
 
 export default function Reports() {
@@ -73,17 +74,18 @@ export default function Reports() {
                     <p>Comprehensive sales turnover, GSTR-1 summaries, customer ledgers, and official CSV exports</p>
                 </div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                    <button type="button" className="action-btn-sm" onClick={() => handleExport("invoices")}>
-                        Export Invoices CSV
+                    <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>Export CSV:</span>
+                    <button type="button" className="action-btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }} onClick={() => handleExport("invoices")}>
+                        <Icon type="download" size={13} /> Invoices
                     </button>
-                    <button type="button" className="action-btn-sm" onClick={() => handleExport("customers")}>
-                        Export Customers CSV
+                    <button type="button" className="action-btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }} onClick={() => handleExport("customers")}>
+                        <Icon type="download" size={13} /> Customers
                     </button>
-                    <button type="button" className="action-btn-sm" onClick={() => handleExport("products")}>
-                        Export Products CSV
+                    <button type="button" className="action-btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }} onClick={() => handleExport("products")}>
+                        <Icon type="download" size={13} /> Products
                     </button>
-                    <button type="button" className="action-btn-sm" onClick={() => handleExport("payments")}>
-                        Export Payments CSV
+                    <button type="button" className="action-btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }} onClick={() => handleExport("payments")}>
+                        <Icon type="download" size={13} /> Payments
                     </button>
                 </div>
             </div>

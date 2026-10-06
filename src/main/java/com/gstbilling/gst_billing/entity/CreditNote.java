@@ -1,5 +1,6 @@
 package com.gstbilling.gst_billing.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -21,6 +22,7 @@ public class CreditNote {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "business_id", nullable = false)
+    @JsonIgnore
     private Business business;
 
     @Column(name = "credit_note_number", nullable = false)

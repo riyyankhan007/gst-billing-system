@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Icon from "../components/Icon";
 import { getCreditNotes, getDebitNotes, createCreditNote, cancelCreditNote, createDebitNote, cancelDebitNote, getInvoices } from "../services/api";
 
 export default function Notes() {
@@ -141,8 +142,8 @@ export default function Notes() {
             </div>
 
             {successMessage && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600" }}>
-                    ✓ {successMessage}
+                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Icon type="checkCircle" size={16} color="#065f46" /> {successMessage}
                 </div>
             )}
 
@@ -245,7 +246,7 @@ export default function Notes() {
                             <h3 style={{ margin: 0, fontSize: "18px" }}>
                                 Issue {tab === "credit" ? "Credit Note" : "Debit Note"}
                             </h3>
-                            <button className="btn-close" onClick={() => setShowModal(false)}>✕</button>
+                            <button className="btn-close" onClick={() => setShowModal(false)}><Icon type="close" size={14} /></button>
                         </div>
 
                         {modalError && (

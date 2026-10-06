@@ -48,7 +48,7 @@ public class ReportService {
 
         List<Invoice> invoices = invoiceRepository.findByBusiness_IdAndInvoiceDateBetween(businessId, start, end)
                 .stream()
-                .filter(inv -> !"CANCELLED".equalsIgnoreCase(inv.getStatus()))
+                .filter(inv -> !"CANCELLED".equalsIgnoreCase(inv.getStatus()) && !"DRAFT".equalsIgnoreCase(inv.getStatus()))
                 .sorted(Comparator.comparing(Invoice::getInvoiceDate))
                 .toList();
 
@@ -381,7 +381,11 @@ public class ReportService {
 
     private String escape(String s) {
         if (s == null) return "";
-        return "\"" + s.replace("\"", "\"\"") + "\"";
+        String val = s.replace("\"", "\"\"");
+        if (val.startsWith("=") || val.startsWith("+") || val.startsWith("-") || val.startsWith("@") || val.startsWith("\t") || val.startsWith("\r")) {
+            val = "'" + val;
+        }
+        return "\"" + val + "\"";
     }
 
     private static class HsnAccumulator {

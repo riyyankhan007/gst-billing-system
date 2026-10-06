@@ -22,19 +22,22 @@ public class NoteService {
     private final CustomerRepository customerRepository;
     private final BusinessRepository businessRepository;
     private final CurrentUserService currentUserService;
+    private final InvoiceSequenceService sequenceService;
 
     public NoteService(CreditNoteRepository creditNoteRepository,
                        DebitNoteRepository debitNoteRepository,
                        InvoiceRepository invoiceRepository,
                        CustomerRepository customerRepository,
                        BusinessRepository businessRepository,
-                       CurrentUserService currentUserService) {
+                       CurrentUserService currentUserService,
+                       InvoiceSequenceService sequenceService) {
         this.creditNoteRepository = creditNoteRepository;
         this.debitNoteRepository = debitNoteRepository;
         this.invoiceRepository = invoiceRepository;
         this.customerRepository = customerRepository;
         this.businessRepository = businessRepository;
         this.currentUserService = currentUserService;
+        this.sequenceService = sequenceService;
     }
 
     // =====================================
@@ -58,23 +61,33 @@ public class NoteService {
         note.setCreatedAt(LocalDateTime.now());
         note.setStatus("ISSUED");
 
-        // Concurrency-safe number generation
-        String fy = (business.getFinancialYear() != null && !business.getFinancialYear().isBlank())
-                ? business.getFinancialYear().trim() : "2026-27";
-        int count = creditNoteRepository.findByBusiness_IdOrderByNoteDateDescIdDesc(businessId).size() + 1;
-        String noteNumber = String.format("CN/%s/%03d", fy, count);
-        while (creditNoteRepository.existsByBusiness_IdAndCreditNoteNumberIgnoreCase(businessId, noteNumber)) {
-            count++;
-            noteNumber = String.format("CN/%s/%03d", fy, count);
+        BigDecimal taxable = note.getTaxableAmount() != null ? note.getTaxableAmount() : BigDecimal.ZERO;
+        BigDecimal tax = note.getTotalTax() != null ? note.getTotalTax() : BigDecimal.ZERO;
+
+        if (taxable.compareTo(BigDecimal.ZERO) < 0 || tax.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Credit note taxable amount and tax must be non-negative.");
         }
+
+        BigDecimal grandTotal = taxable.add(tax).setScale(2, RoundingMode.HALF_UP);
+        if (grandTotal.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Credit note grand total must be greater than zero.");
+        }
+
+        BigDecimal invGrand = invoice.getGrandTotal() != null ? invoice.getGrandTotal() : BigDecimal.ZERO;
+        if (grandTotal.compareTo(invGrand) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    String.format("Credit note amount (₹%s) cannot exceed original invoice amount (₹%s)", grandTotal, invGrand));
+        }
+
+        // Concurrency-safe number generation
+        String noteNumber = sequenceService.generateNextCreditNoteNumber(business, note.getNoteDate());
         note.setCreditNoteNumber(noteNumber);
 
         // Taxes
         boolean isIntra = invoice.getSupplierState() != null && invoice.getCustomerState() != null
                 && invoice.getSupplierState().trim().equalsIgnoreCase(invoice.getCustomerState().trim());
 
-        BigDecimal taxable = note.getTaxableAmount() != null ? note.getTaxableAmount() : BigDecimal.ZERO;
-        BigDecimal tax = note.getTotalTax() != null ? note.getTotalTax() : BigDecimal.ZERO;
+        note.setGrandTotal(grandTotal);
 
         if (isIntra) {
             BigDecimal half = tax.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
@@ -86,9 +99,6 @@ public class NoteService {
             note.setSgst(BigDecimal.ZERO);
             note.setIgst(tax);
         }
-
-        BigDecimal grandTotal = taxable.add(tax).setScale(2, RoundingMode.HALF_UP);
-        note.setGrandTotal(grandTotal);
 
         CreditNote saved = creditNoteRepository.save(note);
 
@@ -161,22 +171,26 @@ public class NoteService {
         note.setCreatedAt(LocalDateTime.now());
         note.setStatus("ISSUED");
 
-        // Concurrency-safe number generation
-        String fy = (business.getFinancialYear() != null && !business.getFinancialYear().isBlank())
-                ? business.getFinancialYear().trim() : "2026-27";
-        int count = debitNoteRepository.findByBusiness_IdOrderByNoteDateDescIdDesc(businessId).size() + 1;
-        String noteNumber = String.format("DN/%s/%03d", fy, count);
-        while (debitNoteRepository.existsByBusiness_IdAndDebitNoteNumberIgnoreCase(businessId, noteNumber)) {
-            count++;
-            noteNumber = String.format("DN/%s/%03d", fy, count);
+        BigDecimal taxable = note.getTaxableAmount() != null ? note.getTaxableAmount() : BigDecimal.ZERO;
+        BigDecimal tax = note.getTotalTax() != null ? note.getTotalTax() : BigDecimal.ZERO;
+
+        if (taxable.compareTo(BigDecimal.ZERO) < 0 || tax.compareTo(BigDecimal.ZERO) < 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debit note taxable amount and tax must be non-negative.");
         }
+
+        BigDecimal grandTotal = taxable.add(tax).setScale(2, RoundingMode.HALF_UP);
+        if (grandTotal.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Debit note grand total must be greater than zero.");
+        }
+
+        // Concurrency-safe number generation
+        String noteNumber = sequenceService.generateNextDebitNoteNumber(business, note.getNoteDate());
         note.setDebitNoteNumber(noteNumber);
+
+        note.setGrandTotal(grandTotal);
 
         boolean isIntra = invoice != null && invoice.getSupplierState() != null && invoice.getCustomerState() != null
                 && invoice.getSupplierState().trim().equalsIgnoreCase(invoice.getCustomerState().trim());
-
-        BigDecimal taxable = note.getTaxableAmount() != null ? note.getTaxableAmount() : BigDecimal.ZERO;
-        BigDecimal tax = note.getTotalTax() != null ? note.getTotalTax() : BigDecimal.ZERO;
 
         if (isIntra) {
             BigDecimal half = tax.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
@@ -188,9 +202,6 @@ public class NoteService {
             note.setSgst(BigDecimal.ZERO);
             note.setIgst(tax);
         }
-
-        BigDecimal grandTotal = taxable.add(tax).setScale(2, RoundingMode.HALF_UP);
-        note.setGrandTotal(grandTotal);
 
         DebitNote saved = debitNoteRepository.save(note);
 

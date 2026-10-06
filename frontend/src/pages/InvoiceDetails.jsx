@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Icon from "../components/Icon";
 import {
     getInvoiceById,
     issueInvoice,
@@ -14,7 +15,8 @@ import {
     cancelEWayBill,
     getEWayBills,
     getPaymentsForInvoice,
-    downloadPaymentReceiptPdf
+    downloadPaymentReceiptPdf,
+    getAssetUrl
 } from "../services/api";
 
 export default function InvoiceDetails({ invoiceId, onBack }) {
@@ -270,7 +272,7 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             const cleanPhone = phone.replace(/[^0-9]/g, "");
             const formattedPhone = cleanPhone.length === 10 ? "91" + cleanPhone : cleanPhone;
             const amount = formatCurrency(invoice.balanceAmount != null ? invoice.balanceAmount : invoice.grandTotal);
-            const text = `*Payment Reminder from ${invoice.business?.name || "Our Business"}*\n\nHello ${customerName},\nThis is a friendly reminder for Invoice *#${invoice.invoiceNumber}*:\n📅 Date: ${invoice.invoiceDate}\n💰 Balance Due: *${amount}*\n📊 Status: ${invoice.status}\n\nPlease clear the payment at your earliest convenience.\nThank you!`;
+            const text = `*Payment Reminder from ${invoice.business?.name || "Our Business"}*\n\nHello ${customerName},\nThis is a friendly reminder for Invoice *#${invoice.invoiceNumber}*:\nDate: ${invoice.invoiceDate}\nBalance Due: *${amount}*\nStatus: ${invoice.status}\n\nPlease clear the payment at your earliest convenience.\nThank you!`;
             const whatsappUrl = formattedPhone
                 ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(text)}`
                 : `https://wa.me/?text=${encodeURIComponent(text)}`;
@@ -335,8 +337,8 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
         return (
             <div className="empty-state">
                 <p style={{ color: "var(--danger)" }}>{error || "Invoice not found"}</p>
-                <button type="button" className="secondary-button" onClick={onBack} style={{ marginTop: "16px" }}>
-                    ← Back to Invoices
+                <button type="button" className="secondary-button" onClick={onBack} style={{ marginTop: "16px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <Icon type="arrowLeft" size={14} /> Back to Invoices
                 </button>
             </div>
         );
@@ -349,18 +351,90 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
 
     return (
         <div className="invoice-view-container">
-            {/* Header Actions */}
-            <div className="invoice-details-header">
-                <button type="button" className="text-button" onClick={onBack}>
-                    ← Back to Invoices
+            {/* Top Navigation & Utility Row */}
+            <div className="invoice-top-nav">
+                <button
+                    type="button"
+                    className="invoice-back-link"
+                    onClick={onBack}
+                >
+                    <Icon type="arrowLeft" size={14} /> Back to Invoices
                 </button>
 
-                <div className="invoice-actions-group" style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-                    {/* Status badge in header */}
-                    <span className={`status-badge status-${invoice.status?.toLowerCase()}`} style={{ marginRight: "4px" }}>
-                        {invoice.status}
-                    </span>
+                <div className="invoice-top-nav-actions">
+                    <button
+                        type="button"
+                        className="btn-utility"
+                        onClick={handleDownloadPdf}
+                        title="Download official PDF invoice"
+                    >
+                        <Icon type="download" size={14} /> Download PDF
+                    </button>
 
+                    {invoice.status !== "CANCELLED" && invoice.status !== "PAID" && (
+                        <button
+                            type="button"
+                            className="btn-utility-danger"
+                            onClick={handleCancel}
+                            disabled={actionLoading}
+                            title="Cancel this invoice"
+                        >
+                            Cancel Invoice
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Dedicated Invoice Command & Control Banner */}
+            <div className="invoice-command-card">
+                {/* Left: Invoice Identity & Key Snapshot */}
+                <div className="invoice-command-identity">
+                    <div className="invoice-command-title-row">
+                        <h1 className="invoice-command-number">
+                            Invoice #{invoice.invoiceNumber || invoice.id}
+                        </h1>
+                        <span className={`status-badge status-${invoice.status?.toLowerCase()}`}>
+                            {invoice.status}
+                        </span>
+                    </div>
+
+                    <div className="invoice-command-meta">
+                        <span className="meta-chip">
+                            <span className="meta-label">Customer:</span>
+                            <strong>{customer.name || "Customer"}</strong>
+                        </span>
+                        <span className="meta-dot">•</span>
+                        <span className="meta-chip">
+                            <span className="meta-label">Date:</span>
+                            <span>{invoice.invoiceDate}</span>
+                        </span>
+                        <span className="meta-dot">•</span>
+                        <span className="meta-chip">
+                            <span className="meta-label">Total:</span>
+                            <strong style={{ color: "var(--text-primary)" }}>{formatCurrency(invoice.grandTotal)}</strong>
+                        </span>
+                        {balance > 0 ? (
+                            <>
+                                <span className="meta-dot">•</span>
+                                <span className="meta-chip due">
+                                    <span className="meta-label">Due:</span>
+                                    <strong>{formatCurrency(balance)}</strong>
+                                </span>
+                            </>
+                        ) : paid > 0 ? (
+                            <>
+                                <span className="meta-dot">•</span>
+                                <span className="meta-chip paid">
+                                    <Icon type="checkCircle" size={12} color="var(--success)" />
+                                    <strong>Settled</strong>
+                                </span>
+                            </>
+                        ) : null}
+                    </div>
+                </div>
+
+                {/* Right: Structured Actions Grouped by Purpose */}
+                <div className="invoice-command-actions">
                     {/* DRAFT Actions */}
                     {invoice.status === "DRAFT" && (
                         <button
@@ -369,7 +443,7 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                             onClick={handleIssue}
                             disabled={actionLoading}
                         >
-                            ✓ Issue Invoice
+                            <Icon type="check" size={14} /> Issue Invoice
                         </button>
                     )}
 
@@ -381,101 +455,72 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                             onClick={handleMarkSent}
                             disabled={actionLoading}
                         >
-                            📤 Mark as Sent
+                            <Icon type="send" size={14} /> Mark as Sent
                         </button>
                     )}
 
-                    {/* Record Payment for non-paid, non-cancelled */}
+                    {/* Record Payment */}
                     {["ISSUED", "SENT", "PARTIALLY_PAID", "OVERDUE"].includes(invoice.status) && (
                         <button
                             type="button"
-                            className="success-button"
+                            className="primary-button"
                             onClick={() => {
                                 setPayAmount(balance.toFixed(2));
                                 setPayModalOpen(true);
                             }}
                             disabled={actionLoading}
                         >
-                            💳 Record Payment
+                            <Icon type="payment" size={14} /> Record Payment
                         </button>
                     )}
 
-                    {/* Send Reminder button */}
+                    {/* Remind Customer */}
                     {invoice.status !== "PAID" && invoice.status !== "CANCELLED" && (
                         <button
                             type="button"
-                            className="whatsapp-button"
+                            className="secondary-button"
                             onClick={handleOpenReminder}
                             title="Send payment reminder via WhatsApp or Email"
                         >
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                            </svg>
-                            Remind Customer
+                            <Icon type="whatsapp" size={14} /> Remind Customer
                         </button>
                     )}
 
-                    {/* E-Invoice Statutory Action */}
+                    {/* Statutory & Compliance Group */}
                     {invoice.status !== "DRAFT" && invoice.status !== "CANCELLED" && (
-                        invoice.irn ? (
+                        <div className="compliance-action-group">
+                            {invoice.irn ? (
+                                <button
+                                    type="button"
+                                    className="compliance-btn danger"
+                                    onClick={() => setEInvoiceCancelModalOpen(true)}
+                                    disabled={actionLoading}
+                                    title="Cancel Statutory IRN"
+                                >
+                                    <Icon type="cancel" size={13} /> Cancel IRN
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className="compliance-btn irn"
+                                    onClick={handleGenerateEInvoice}
+                                    disabled={actionLoading}
+                                    title="Generate Statutory E-Invoice"
+                                >
+                                    <Icon type="zap" size={13} /> E-Invoice
+                                </button>
+                            )}
+
                             <button
                                 type="button"
-                                className="action-btn-sm"
-                                style={{ background: "rgba(239, 68, 68, 0.12)", color: "#b91c1c", border: "1px solid rgba(239, 68, 68, 0.3)" }}
-                                onClick={() => setEInvoiceCancelModalOpen(true)}
+                                className="compliance-btn ewb"
+                                onClick={() => setEwayModalOpen(true)}
                                 disabled={actionLoading}
+                                title="Generate Statutory E-Way Bill"
                             >
-                                ✕ Cancel IRN
+                                <Icon type="truck" size={13} /> E-Way Bill
                             </button>
-                        ) : (
-                            <button
-                                type="button"
-                                className="action-btn-sm"
-                                style={{ background: "rgba(14, 165, 233, 0.12)", color: "#0284c7", border: "1px solid rgba(14, 165, 233, 0.3)" }}
-                                onClick={handleGenerateEInvoice}
-                                disabled={actionLoading}
-                            >
-                                ⚡ E-Invoice (IRN)
-                            </button>
-                        )
-                    )}
-
-                    {/* E-Way Bill Action */}
-                    {invoice.status !== "DRAFT" && invoice.status !== "CANCELLED" && (
-                        <button
-                            type="button"
-                            className="action-btn-sm"
-                            style={{ background: "rgba(245, 158, 11, 0.12)", color: "#b45309", border: "1px solid rgba(245, 158, 11, 0.3)" }}
-                            onClick={() => setEwayModalOpen(true)}
-                            disabled={actionLoading}
-                        >
-                            🚚 E-Way Bill
-                        </button>
-                    )}
-
-                    <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={handleDownloadPdf}
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                            <polyline points="7 10 12 15 17 10" />
-                            <line x1="12" y1="15" x2="12" y2="3" />
-                        </svg>
-                        PDF
-                    </button>
-
-                    {invoice.status !== "CANCELLED" && invoice.status !== "PAID" && (
-                        <button
-                            type="button"
-                            className="danger-button"
-                            onClick={handleCancel}
-                            disabled={actionLoading}
-                        >
-                            Cancel
-                        </button>
+                        </div>
                     )}
                 </div>
             </div>
@@ -565,7 +610,9 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                         {/* Bank Details */}
                         {(business.bankName || business.bankAccountNumber || business.upiId) && (
                             <div style={{ marginBottom: "16px", padding: "12px", border: "1px dashed var(--border-color)", borderRadius: "6px", fontSize: "12px" }}>
-                                <strong style={{ display: "block", marginBottom: "6px", color: "var(--text-primary)" }}>🏦 Bank & Payment Details</strong>
+                                <strong style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px", color: "var(--text-primary)" }}>
+                                    <Icon type="bank" size={14} /> Bank & Payment Details
+                                </strong>
                                 {business.bankName && <div><strong>Bank:</strong> {business.bankName}</div>}
                                 {business.bankAccountNumber && <div><strong>A/C No:</strong> {business.bankAccountNumber}</div>}
                                 {business.bankIfsc && <div><strong>IFSC:</strong> {business.bankIfsc}</div>}
@@ -645,7 +692,7 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                             {business.signature && (
                                 <div style={{ marginTop: "20px", textAlign: "right" }}>
                                     <img
-                                        src={business.signature}
+                                        src={getAssetUrl(business.signature)}
                                         alt="Authorised Signatory"
                                         style={{ maxHeight: "48px", objectFit: "contain", marginBottom: "4px" }}
                                     />
@@ -663,8 +710,8 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "12px" }}>
                         <div>
                             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                                <span className="badge" style={{ background: "#10b981", color: "#fff", fontWeight: "700" }}>
-                                    ✓ STATUTORY E-INVOICE (IRN)
+                                <span className="badge" style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#10b981", color: "#fff", fontWeight: "700" }}>
+                                    <Icon type="checkCircle" size={14} color="#fff" /> STATUTORY E-INVOICE (IRN)
                                 </span>
                                 <span style={{ fontSize: "12px", color: "#065f46" }}>Status: {invoice.einvoiceStatus || "GENERATED"}</span>
                             </div>
@@ -679,12 +726,13 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                         <button
                             type="button"
                             className="btn btn-secondary btn-sm"
+                            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                             onClick={() => {
                                 navigator.clipboard.writeText(invoice.irn);
                                 alert("IRN copied to clipboard!");
                             }}
                         >
-                            📋 Copy IRN
+                            <Icon type="copy" size={13} /> Copy IRN
                         </button>
                     </div>
                 </div>
@@ -694,7 +742,7 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             {ewayBills && ewayBills.length > 0 && (
                 <div className="card" style={{ padding: "16px 20px", marginTop: "16px", borderLeft: "4px solid #f59e0b" }}>
                     <h3 style={{ margin: "0 0 12px 0", fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-                        🚚 E-Way Bills
+                        <Icon type="truck" size={18} color="#b45309" /> E-Way Bills
                     </h3>
                     <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                         {ewayBills.map(ewb => (
@@ -736,7 +784,7 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                 <div className="card" style={{ padding: "16px 20px", marginTop: "16px", borderLeft: "4px solid #6366f1" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                         <h3 style={{ margin: 0, fontSize: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
-                            💳 Payment Receipts & Settlement History
+                            <Icon type="payment" size={18} color="#4f46e5" /> Payment Receipts & Settlement History
                         </h3>
                         <span style={{ fontSize: "12px", color: "var(--muted)" }}>Total Paid: {formatCurrency(paid)}</span>
                     </div>
@@ -771,9 +819,9 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                                                 type="button"
                                                 className="btn btn-secondary btn-sm"
                                                 onClick={() => handleDownloadReceipt(p)}
-                                                style={{ padding: "4px 8px", fontSize: "11px" }}
+                                                style={{ padding: "4px 8px", fontSize: "11px", display: "inline-flex", alignItems: "center", gap: "5px" }}
                                             >
-                                                📄 Download Receipt
+                                                <Icon type="download" size={12} /> Download Receipt
                                             </button>
                                         </td>
                                     </tr>
@@ -789,8 +837,8 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                 <div className="modal-backdrop" onClick={() => setPayModalOpen(false)}>
                     <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: "440px" }}>
                         <div className="modal-header">
-                            <h2>💳 Record Payment for {invoice.invoiceNumber}</h2>
-                            <button type="button" className="modal-close-btn" onClick={() => setPayModalOpen(false)}>✕</button>
+                            <h2 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0 }}><Icon type="payment" size={20} /> Record Payment for {invoice.invoiceNumber}</h2>
+                            <button type="button" className="modal-close-btn" onClick={() => setPayModalOpen(false)}><Icon type="close" size={14} /></button>
                         </div>
                         <form onSubmit={handleRecordPayment} className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                             <div className="reminder-summary-card">
@@ -883,7 +931,7 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                                 className="modal-close-btn"
                                 onClick={() => setReminderModalOpen(false)}
                             >
-                                ✕
+                                <Icon type="close" size={14} />
                             </button>
                         </div>
 
@@ -974,9 +1022,17 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                                     type="button"
                                     className="secondary-button"
                                     onClick={handleCopyMessage}
-                                    style={{ width: "100%" }}
+                                    style={{ width: "100%", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                                 >
-                                    {copied ? "✓ Copied to Clipboard!" : "Copy Reminder Text"}
+                                    {copied ? (
+                                        <>
+                                            <Icon type="check" size={14} /> Copied to Clipboard!
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Icon type="copy" size={14} /> Copy Reminder Text
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -989,8 +1045,8 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                 <div className="modal-backdrop" onClick={() => setEInvoiceCancelModalOpen(false)}>
                     <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: "440px" }}>
                         <div className="modal-header">
-                            <h2>✕ Cancel Statutory E-Invoice</h2>
-                            <button type="button" className="modal-close-btn" onClick={() => setEInvoiceCancelModalOpen(false)}>✕</button>
+                            <h2 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0 }}><Icon type="cancel" size={20} color="var(--danger)" /> Cancel Statutory E-Invoice</h2>
+                            <button type="button" className="modal-close-btn" onClick={() => setEInvoiceCancelModalOpen(false)}><Icon type="close" size={14} /></button>
                         </div>
                         <form onSubmit={handleCancelEInvoice} className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                             <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: 0 }}>
@@ -1038,8 +1094,8 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                 <div className="modal-backdrop" onClick={() => setEwayModalOpen(false)}>
                     <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: "460px" }}>
                         <div className="modal-header">
-                            <h2>🚚 Generate Statutory E-Way Bill</h2>
-                            <button type="button" className="modal-close-btn" onClick={() => setEwayModalOpen(false)}>✕</button>
+                            <h2 style={{ display: "flex", alignItems: "center", gap: "8px", margin: 0 }}><Icon type="truck" size={20} color="#b45309" /> Generate Statutory E-Way Bill</h2>
+                            <button type="button" className="modal-close-btn" onClick={() => setEwayModalOpen(false)}><Icon type="close" size={14} /></button>
                         </div>
                         <form onSubmit={handleGenerateEWayBill} className="modal-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                             <div className="form-group">

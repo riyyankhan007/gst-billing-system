@@ -4,6 +4,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record ResetPasswordRequest(
+    String email,
+
     @NotBlank(message = "Reset token is required")
     String token,
 

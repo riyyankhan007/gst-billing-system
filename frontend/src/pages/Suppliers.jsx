@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import Icon from "../components/Icon";
 import { getSuppliers, createSupplier, updateSupplier, deleteSupplier, getSupplierDetails } from "../services/api";
 
 export default function Suppliers() {
@@ -140,8 +141,8 @@ export default function Suppliers() {
             </div>
 
             {successMessage && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600" }}>
-                    ✓ {successMessage}
+                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Icon type="checkCircle" size={16} color="#065f46" /> {successMessage}
                 </div>
             )}
 
@@ -152,14 +153,29 @@ export default function Suppliers() {
             )}
 
             <div className="card" style={{ padding: "16px 20px" }}>
-                <input
-                    type="text"
-                    className="search-input"
-                    placeholder="Search by supplier name, GSTIN, or phone..."
-                    value={search}
-                    onChange={e => setSearch(e.target.value)}
-                    style={{ minWidth: "320px", maxWidth: "400px" }}
-                />
+                <div className="search-input-wrapper" style={{ minWidth: "280px", maxWidth: "420px" }}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="11" cy="11" r="8" />
+                        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                        type="text"
+                        className="search-input"
+                        placeholder="Search by supplier name, GSTIN, or phone..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
+                    {search && (
+                        <button
+                            type="button"
+                            className="search-clear-btn"
+                            onClick={() => setSearch("")}
+                            title="Clear search"
+                        >
+                            <Icon type="close" size={13} />
+                        </button>
+                    )}
+                </div>
             </div>
 
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
@@ -225,7 +241,7 @@ export default function Suppliers() {
                             <h3 style={{ margin: 0, fontSize: "18px" }}>
                                 {editingSupplier ? "Edit Supplier" : "Add New Supplier"}
                             </h3>
-                            <button className="btn-close" onClick={() => setShowModal(false)}>✕</button>
+                            <button className="btn-close" onClick={() => setShowModal(false)}><Icon type="close" size={14} /></button>
                         </div>
 
                         {modalError && (
@@ -368,7 +384,7 @@ export default function Suppliers() {
                                     GSTIN: {detailsSupplier.supplier.gstin || "Unregistered"} | {detailsSupplier.supplier.state}
                                 </span>
                             </div>
-                            <button className="btn-close" onClick={() => setDetailsSupplier(null)}>✕</button>
+                            <button className="btn-close" onClick={() => setDetailsSupplier(null)}><Icon type="close" size={14} /></button>
                         </div>
 
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "20px" }}>

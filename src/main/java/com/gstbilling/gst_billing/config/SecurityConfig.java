@@ -81,7 +81,8 @@ public class SecurityConfig {
                                 "/api/webhooks/**",
                                 "/api/health",
                                 "/api/metrics",
-                                "/actuator/health"
+                                "/actuator/health",
+                                "/uploads/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

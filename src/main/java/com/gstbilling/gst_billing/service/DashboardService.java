@@ -80,7 +80,7 @@ public class DashboardService {
         Map<Long, ProductSalesAgg> productSalesMap = new HashMap<>();
 
         for (Invoice inv : allInvoices) {
-            if ("CANCELLED".equalsIgnoreCase(inv.getStatus())) {
+            if ("CANCELLED".equalsIgnoreCase(inv.getStatus()) || "DRAFT".equalsIgnoreCase(inv.getStatus())) {
                 continue;
             }
 

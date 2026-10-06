@@ -187,7 +187,7 @@ public class GstCalculationService {
         BigDecimal roundedGrandTotal = rawGrandTotal.setScale(0, RoundingMode.HALF_UP).setScale(2, RoundingMode.HALF_UP);
         BigDecimal roundOffAmount = roundedGrandTotal.subtract(rawGrandTotal).setScale(2, RoundingMode.HALF_UP);
 
-        String inWords = NumberToWordsConverter.convertToIndianCurrencyWords(rawGrandTotal);
+        String inWords = NumberToWordsConverter.convertToIndianCurrencyWords(roundedGrandTotal);
 
         return new GstResult(
                 sumTaxable,
@@ -195,7 +195,7 @@ public class GstCalculationService {
                 sgst,
                 igst,
                 sumTotalTax,
-                rawGrandTotal,
+                roundedGrandTotal,
                 inWords,
                 isIntraState,
                 calculatedItems,

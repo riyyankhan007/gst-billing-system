@@ -135,8 +135,33 @@ public class AuthService {
     @Transactional
     public MessageResponse resetPassword(ResetPasswordRequest request) {
         String token = request.token().trim();
-        User user = users.findByResetPasswordToken(token)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reset code. Please check and try again."));
+        User user;
+
+        if (request.email() != null && !request.email().isBlank()) {
+            String cleanEmail = request.email().trim().toLowerCase();
+            user = users.findByEmailIgnoreCase(cleanEmail)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reset code. Please check and try again."));
+
+            if (user.isAccountLocked()) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,
+                        "Account is temporarily locked due to multiple failed attempts. Please try again after 15 minutes.");
+            }
+
+            if (user.getResetPasswordToken() == null || !user.getResetPasswordToken().equals(token)) {
+                int attempts = user.getFailedLoginAttempts() + 1;
+                user.setFailedLoginAttempts(attempts);
+                if (attempts >= 5) {
+                    user.setLockedUntil(LocalDateTime.now().plusMinutes(15));
+                    user.setResetPasswordToken(null);
+                    user.setResetPasswordExpiresAt(null);
+                }
+                users.save(user);
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reset code. Please check and try again.");
+            }
+        } else {
+            user = users.findByResetPasswordToken(token)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reset code. Please check and try again."));
+        }
 
         if (user.getResetPasswordExpiresAt() == null || user.getResetPasswordExpiresAt().isBefore(LocalDateTime.now())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reset code has expired. Please request a new one.");
@@ -145,6 +170,8 @@ public class AuthService {
         user.setPassword(encoder.encode(request.newPassword()));
         user.setResetPasswordToken(null);
         user.setResetPasswordExpiresAt(null);
+        user.setFailedLoginAttempts(0);
+        user.setLockedUntil(null);
         users.save(user);
 
         emailService.sendPasswordChangedEmail(user.getEmail(), user.getName());
@@ -170,6 +197,7 @@ public class AuthService {
         return new MessageResponse("Your password has been changed successfully! A confirmation email has been sent.", true);
     }
 
+    @Transactional(readOnly = true)
     public UserProfileResponse getCurrentUserProfile() {
         User user = currentUserService.getCurrentUser();
         Business business = user.getBusiness();

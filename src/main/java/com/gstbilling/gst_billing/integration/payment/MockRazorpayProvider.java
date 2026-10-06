@@ -53,7 +53,7 @@ public class MockRazorpayProvider implements PaymentGatewayProvider {
         }
 
         // Mock mode shortcut for testing and development
-        if ("mock_valid_signature".equals(signature) || signature.startsWith("mock_sig_") || "mock_secret".equals(secret)) {
+        if ("mock_valid_signature".equals(signature) || signature.startsWith("mock_sig_")) {
             return true;
         }
 

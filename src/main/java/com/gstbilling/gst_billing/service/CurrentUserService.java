@@ -7,9 +7,11 @@ import com.gstbilling.gst_billing.security.TenantContext;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
+@Transactional(readOnly = true)
 public class CurrentUserService {
     private final UserRepository users;
 

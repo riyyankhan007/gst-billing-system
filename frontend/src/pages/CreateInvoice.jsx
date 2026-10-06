@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import Icon from "../components/Icon";
 import {
     getBusinesses,
     getCustomers,
@@ -82,22 +83,43 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
         setItems(items.filter((_, i) => i !== index));
     }
 
-    // Real-time calculation of totals
+    // Real-time calculation of totals matching GstCalculationService
     function calculateSummary() {
-        let taxableAmount = 0;
-        let totalTax = 0;
+        let sumTaxable = 0;
+        let sumTotalTax = 0;
 
         items.forEach(item => {
             const prod = products.find(p => p.id === Number(item.productId));
             if (!prod) return;
 
             const qty = Number(item.quantity) || 0;
-            const lineTaxable = prod.price * qty;
-            const lineTax = lineTaxable * (prod.gstRate / 100);
+            const price = Number(prod.price) || 0;
+            const rate = Number(prod.gstRate) || 0;
+            const discount = Number(item.discount) || 0;
 
-            taxableAmount += lineTaxable;
-            totalTax += lineTax;
+            const baseTotal = qty * price;
+            const lineAfterDiscount = Math.max(0, baseTotal - discount);
+
+            let lineTaxable = 0;
+            let lineTax = 0;
+
+            if (prod.taxInclusive && rate > 0) {
+                const divisor = 1 + rate / 100;
+                lineTaxable = lineAfterDiscount / divisor;
+                lineTax = lineAfterDiscount - lineTaxable;
+            } else {
+                lineTaxable = lineAfterDiscount;
+                lineTax = lineTaxable * (rate / 100);
+            }
+
+            sumTaxable += lineTaxable;
+            sumTotalTax += lineTax;
         });
+
+        const invoiceDisc = Number(discountAmount) || 0;
+        if (invoiceDisc > 0) {
+            sumTaxable = Math.max(0, sumTaxable - invoiceDisc);
+        }
 
         const selectedBiz = businesses.find(b => b.id === Number(businessId));
         const selectedCust = customers.find(c => c.id === Number(customerId));
@@ -109,25 +131,27 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
         if (selectedBiz && selectedCust && selectedBiz.state && selectedCust.state) {
             const isIntraState = selectedBiz.state.trim().toLowerCase() === selectedCust.state.trim().toLowerCase();
             if (isIntraState) {
-                cgst = totalTax / 2;
-                sgst = totalTax / 2;
+                cgst = sumTotalTax / 2;
+                sgst = sumTotalTax / 2;
             } else {
-                igst = totalTax;
+                igst = sumTotalTax;
             }
         } else {
-            // Default to intra-state split if state unknown
-            cgst = totalTax / 2;
-            sgst = totalTax / 2;
+            cgst = sumTotalTax / 2;
+            sgst = sumTotalTax / 2;
         }
 
-        const grandTotal = taxableAmount + totalTax;
+        const rawGrandTotal = sumTaxable + sumTotalTax;
+        const grandTotal = Math.round(rawGrandTotal);
+        const roundOff = grandTotal - rawGrandTotal;
 
         return {
-            taxableAmount,
-            totalTax,
+            taxableAmount: sumTaxable,
+            totalTax: sumTotalTax,
             cgst,
             sgst,
             igst,
+            roundOff,
             grandTotal
         };
     }
@@ -198,10 +222,10 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
             <button
                 type="button"
                 className="text-button"
-                style={{ marginBottom: "16px" }}
+                style={{ marginBottom: "16px", display: "inline-flex", alignItems: "center", gap: "6px" }}
                 onClick={onBack}
             >
-                ← Back to Overview
+                <Icon type="arrowLeft" size={14} /> Back to Overview
             </button>
 
             <div className="page-heading">
@@ -282,7 +306,7 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
                                     <option value="">-- Choose Customer --</option>
                                     {customers.map(c => (
                                         <option key={c.id} value={c.id}>
-                                            {c.name} ({c.state || "No State"}{c.phone ? ` · 📞 ${c.phone}` : ""})
+                                            {c.name} ({c.state || "No State"}{c.phone ? ` · Ph: ${c.phone}` : ""})
                                         </option>
                                     ))}
                                 </select>

@@ -117,13 +117,44 @@ public class BusinessService {
         return saved;
     }
 
+    private String validateAndExtractExtension(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File cannot be empty");
+        }
+        // Max 2MB limit
+        if (file.getSize() > 2 * 1024 * 1024) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File size must not exceed 2MB");
+        }
+        String contentType = file.getContentType();
+        if (contentType == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid content type");
+        }
+        String ct = contentType.trim().toLowerCase();
+        String ext;
+        if (ct.equals("image/png")) {
+            ext = ".png";
+        } else if (ct.equals("image/jpeg") || ct.equals("image/jpg")) {
+            ext = ".jpg";
+        } else if (ct.equals("image/webp")) {
+            ext = ".webp";
+        } else {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only PNG, JPEG, and WebP images are allowed");
+        }
+
+        String original = file.getOriginalFilename();
+        if (original != null && !original.isBlank()) {
+            String lower = original.toLowerCase();
+            if (!(lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".webp"))) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "File extension must be .png, .jpg, .jpeg, or .webp");
+            }
+        }
+        return ext;
+    }
+
     @Transactional
     public Business saveLogo(MultipartFile file) {
-        if (file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a logo file");
-        }
-        String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "logo.png";
-        String filename = "business-" + getBusiness().getId() + "-logo-" + System.currentTimeMillis() + "-" + Path.of(original).getFileName();
+        String ext = validateAndExtractExtension(file);
+        String filename = "business-" + getBusiness().getId() + "-logo-" + System.currentTimeMillis() + ext;
         try {
             Path directory = Path.of("uploads").toAbsolutePath();
             Files.createDirectories(directory);
@@ -140,11 +171,8 @@ public class BusinessService {
 
     @Transactional
     public Business saveSignature(MultipartFile file) {
-        if (file.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Choose a signature/stamp file");
-        }
-        String original = file.getOriginalFilename() != null ? file.getOriginalFilename() : "signature.png";
-        String filename = "business-" + getBusiness().getId() + "-signature-" + System.currentTimeMillis() + "-" + Path.of(original).getFileName();
+        String ext = validateAndExtractExtension(file);
+        String filename = "business-" + getBusiness().getId() + "-signature-" + System.currentTimeMillis() + ext;
         try {
             Path directory = Path.of("uploads").toAbsolutePath();
             Files.createDirectories(directory);

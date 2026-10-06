@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Icon from "../components/Icon";
 import { login, register, forgotPassword, resetPassword } from "../services/api";
 
 export default function Login({ onAuthenticated, onBackToHome, initialMode = "login" }) {
@@ -137,6 +138,7 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
 
         try {
             const res = await resetPassword({
+                email: form.email ? form.email.trim() : undefined,
                 token: form.token.trim(),
                 newPassword: form.newPassword
             });
@@ -159,10 +161,10 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
                     <button
                         type="button"
                         className="text-button"
-                        style={{ marginBottom: "16px", alignSelf: "flex-start", color: "var(--primary)", fontWeight: "600" }}
+                        style={{ marginBottom: "16px", alignSelf: "flex-start", color: "var(--primary)", fontWeight: "600", display: "inline-flex", alignItems: "center", gap: "6px" }}
                         onClick={onBackToHome}
                     >
-                        ← Back to Product Overview
+                        <Icon type="arrowLeft" size={14} /> Back to Product Overview
                     </button>
                 )}
                 <div className="auth-header">
@@ -372,9 +374,10 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
                             <button
                                 type="button"
                                 className="auth-link"
+                                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                                 onClick={() => switchMode("login")}
                             >
-                                ← Back to Sign In
+                                <Icon type="arrowLeft" size={13} /> Back to Sign In
                             </button>
                         </div>
                     </form>
@@ -451,9 +454,10 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
                             <button
                                 type="button"
                                 className="auth-link"
+                                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                                 onClick={() => switchMode("login")}
                             >
-                                ← Back to Sign In
+                                <Icon type="arrowLeft" size={13} /> Back to Sign In
                             </button>
                         </div>
                     </form>

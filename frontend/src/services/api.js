@@ -3,6 +3,15 @@ const API_BASE_URL =
 
 const token = () => localStorage.getItem("gstToken");
 
+export function getAssetUrl(path) {
+    if (!path) return "";
+    if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) {
+        return path;
+    }
+    const apiHost = API_BASE_URL.replace(/\/api\/?$/, "");
+    return `${apiHost}${path.startsWith("/") ? "" : "/"}${path}`;
+}
+
 async function request(path, options = {}) {
     const headers = {
         ...(options.body instanceof FormData
