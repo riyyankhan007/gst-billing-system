@@ -137,7 +137,8 @@ export default function Notes() {
                     <p>Handle sales returns, discounts, and invoice value revisions compliant with GST</p>
                 </div>
                 <button className="primary-button" onClick={openModal} disabled={invoices.length === 0}>
-                    + Issue {tab === "credit" ? "Credit Note" : "Debit Note"}
+                    <Icon type="plus" size={13} />
+                    <span>Issue {tab === "credit" ? "Credit Note" : "Debit Note"}</span>
                 </button>
             </div>
 
@@ -177,11 +178,16 @@ export default function Notes() {
                         <p>Loading notes...</p>
                     </div>
                 ) : currentList.length === 0 ? (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
-                        <p>No {tab === "credit" ? "credit notes" : "debit notes"} recorded.</p>
+                    <div className="empty-state">
+                        <div className="empty-state-icon">
+                            <Icon type="notes" size={26} />
+                        </div>
+                        <h3>No {tab === "credit" ? "credit notes" : "debit notes"} recorded</h3>
+                        <p>Issue GST adjustment notes for sales returns, revisions, or post-sale discounts.</p>
                         {invoices.length > 0 && (
-                            <button className="btn btn-secondary btn-sm" onClick={openModal}>
-                                Issue First {tab === "credit" ? "Credit Note" : "Debit Note"}
+                            <button className="primary-button" onClick={openModal}>
+                                <Icon type="plus" size={13} />
+                                <span>Issue First {tab === "credit" ? "Credit Note" : "Debit Note"}</span>
                             </button>
                         )}
                     </div>

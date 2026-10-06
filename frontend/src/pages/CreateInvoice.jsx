@@ -105,11 +105,11 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
 
             if (prod.taxInclusive && rate > 0) {
                 const divisor = 1 + rate / 100;
-                lineTaxable = lineAfterDiscount / divisor;
-                lineTax = lineAfterDiscount - lineTaxable;
+                lineTaxable = Number((lineAfterDiscount / divisor).toFixed(2));
+                lineTax = Number((lineAfterDiscount - lineTaxable).toFixed(2));
             } else {
                 lineTaxable = lineAfterDiscount;
-                lineTax = lineTaxable * (rate / 100);
+                lineTax = Number((lineTaxable * (rate / 100)).toFixed(2));
             }
 
             sumTaxable += lineTaxable;
@@ -131,19 +131,19 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
         if (selectedBiz && selectedCust && selectedBiz.state && selectedCust.state) {
             const isIntraState = selectedBiz.state.trim().toLowerCase() === selectedCust.state.trim().toLowerCase();
             if (isIntraState) {
-                cgst = sumTotalTax / 2;
-                sgst = sumTotalTax / 2;
+                cgst = Number((sumTotalTax / 2).toFixed(2));
+                sgst = Number((sumTotalTax - cgst).toFixed(2));
             } else {
                 igst = sumTotalTax;
             }
         } else {
-            cgst = sumTotalTax / 2;
-            sgst = sumTotalTax / 2;
+            cgst = Number((sumTotalTax / 2).toFixed(2));
+            sgst = Number((sumTotalTax - cgst).toFixed(2));
         }
 
         const rawGrandTotal = sumTaxable + sumTotalTax;
         const grandTotal = Math.round(rawGrandTotal);
-        const roundOff = grandTotal - rawGrandTotal;
+        const roundOff = Number((grandTotal - rawGrandTotal).toFixed(2));
 
         return {
             taxableAmount: sumTaxable,
@@ -182,11 +182,15 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
             notes: notes,
             termsAndConditions: termsAndConditions,
             status: desiredStatus,
-            items: items.map(i => ({
-                productId: Number(i.productId),
-                quantity: Number(i.quantity),
-                discount: Number(i.discount || 0)
-            }))
+            items: items.map(i => {
+                const prod = products.find(p => p.id === Number(i.productId));
+                return {
+                    productId: Number(i.productId),
+                    quantity: Number(i.quantity),
+                    discount: Number(i.discount || 0),
+                    taxInclusive: prod ? Boolean(prod.taxInclusive) : false
+                };
+            })
         };
 
         const idempotencyKey = (typeof crypto !== "undefined" && crypto.randomUUID)
@@ -221,11 +225,13 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
         <div className="create-invoice-page">
             <button
                 type="button"
-                className="text-button"
-                style={{ marginBottom: "16px", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                className="action-btn-sm"
+                style={{ marginBottom: "16px" }}
                 onClick={onBack}
+                title="Back to Invoices"
             >
-                <Icon type="arrowLeft" size={14} /> Back to Overview
+                <Icon type="arrowLeft" size={13} />
+                <span>Back to Invoices</span>
             </button>
 
             <div className="page-heading">
@@ -243,28 +249,51 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
             )}
 
             {loading ? (
-                <div className="empty-state">
-                    <p>Loading business and customer records...</p>
+                <div className="content-section">
+                    <div className="empty-state">
+                        <div className="spinner" style={{ margin: "0 auto 12px" }} />
+                        <p>Loading business and customer records...</p>
+                    </div>
                 </div>
             ) : customers.length === 0 ? (
-                <div className="empty-state" style={{ background: "#ffffff", border: "1px solid var(--border-color)", borderRadius: "var(--radius-md)", padding: "36px 24px", textAlign: "center" }}>
-                    <h3 style={{ margin: "0 0 8px", color: "var(--text-primary)", fontSize: "18px" }}>No customers found!</h3>
-                    <p style={{ margin: "0 0 16px", color: "var(--text-muted)" }}>You need to create at least one customer before generating an invoice.</p>
-                    {onNavigate && (
-                        <button type="button" className="primary-button" onClick={() => onNavigate("customers")}>
-                            + Add New Customer
-                        </button>
-                    )}
+                <div className="content-section">
+                    <div className="empty-state">
+                        <div className="empty-state-icon">
+                            <Icon type="customer" size={26} />
+                        </div>
+                        <h3>No customers found</h3>
+                        <p>You need to create at least one customer before generating a GST invoice.</p>
+                        {onNavigate && (
+                            <button
+                                type="button"
+                                className="primary-button"
+                                onClick={() => onNavigate("customers")}
+                            >
+                                <Icon type="plus" size={13} />
+                                <span>Add New Customer</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
             ) : products.length === 0 ? (
-                <div className="empty-state" style={{ background: "#ffffff", border: "1px solid var(--border-color)", borderRadius: "var(--radius-md)", padding: "36px 24px", textAlign: "center" }}>
-                    <h3 style={{ margin: "0 0 8px", color: "var(--text-primary)", fontSize: "18px" }}>No products found!</h3>
-                    <p style={{ margin: "0 0 16px", color: "var(--text-muted)" }}>You need to add at least one product or service before creating an invoice.</p>
-                    {onNavigate && (
-                        <button type="button" className="primary-button" onClick={() => onNavigate("products")}>
-                            + Add First Product
-                        </button>
-                    )}
+                <div className="content-section">
+                    <div className="empty-state">
+                        <div className="empty-state-icon">
+                            <Icon type="product" size={26} />
+                        </div>
+                        <h3>No products found</h3>
+                        <p>You need to add at least one product or service before creating a GST invoice.</p>
+                        {onNavigate && (
+                            <button
+                                type="button"
+                                className="primary-button"
+                                onClick={() => onNavigate("products")}
+                            >
+                                <Icon type="plus" size={13} />
+                                <span>Add First Product</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
             ) : (
                 <div className="management-layout">
@@ -377,7 +406,7 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
                                                 <option value="">Select Product *</option>
                                                 {products.map(p => (
                                                     <option key={p.id} value={p.id}>
-                                                        {p.name} — ₹{p.price} ({p.gstRate}% GST)
+                                                        {p.name} — ₹{p.price} ({p.gstRate}% GST{p.taxInclusive ? " · Incl." : ""})
                                                     </option>
                                                 ))}
                                             </select>
@@ -398,7 +427,7 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
                                                     title="Remove item"
                                                     onClick={() => removeItem(index)}
                                                 >
-                                                    ×
+                                                    <Icon type="close" size={13} />
                                                 </button>
                                             )}
                                         </div>
@@ -409,8 +438,10 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
                                     type="button"
                                     className="add-item-btn"
                                     onClick={addItem}
+                                    style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
                                 >
-                                    + Add Another Product
+                                    <Icon type="plus" size={13} />
+                                    <span>Add Another Product</span>
                                 </button>
                             </div>
 

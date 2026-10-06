@@ -174,7 +174,8 @@ export default function Purchases() {
                     <p>Record vendor invoices, track Input Tax Credit (ITC), and automatically increase stock</p>
                 </div>
                 <button className="primary-button" onClick={openCreateModal} disabled={suppliers.length === 0}>
-                    + New Purchase Bill
+                    <Icon type="plus" size={13} />
+                    <span>New Purchase Bill</span>
                 </button>
             </div>
 
@@ -203,11 +204,16 @@ export default function Purchases() {
                         <p>Loading purchase records...</p>
                     </div>
                 ) : purchases.length === 0 ? (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-                        <p style={{ margin: "0 0 12px", fontSize: "15px" }}>No purchase bills recorded yet.</p>
+                    <div className="empty-state">
+                        <div className="empty-state-icon">
+                            <Icon type="purchase" size={26} />
+                        </div>
+                        <h3>No purchase bills recorded yet</h3>
+                        <p>Record vendor inward bills to claim Input Tax Credit (ITC) and update inventory stock.</p>
                         {suppliers.length > 0 && (
-                            <button className="primary-button action-btn-sm" onClick={openCreateModal}>
-                                Record First Purchase
+                            <button className="primary-button" onClick={openCreateModal}>
+                                <Icon type="plus" size={13} />
+                                <span>Record First Purchase</span>
                             </button>
                         )}
                     </div>
@@ -369,8 +375,9 @@ export default function Purchases() {
                             <div>
                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                                     <h4 style={{ margin: 0, fontSize: "14px" }}>Items Purchased</h4>
-                                    <button type="button" className="btn btn-secondary btn-sm" onClick={addItemRow}>
-                                        + Add Item
+                                    <button type="button" className="btn btn-secondary btn-sm" onClick={addItemRow} style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                        <Icon type="plus" size={12} />
+                                        <span>Add Item</span>
                                     </button>
                                 </div>
 

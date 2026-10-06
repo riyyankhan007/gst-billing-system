@@ -332,4 +332,72 @@ class InvoiceLifecycleTest {
         List<AuditLog> logs = auditLogService.getAuditLogsByEntityType(business.getId(), "INVOICE");
         assertTrue(logs.stream().anyMatch(l -> "CANCEL_INVOICE".equals(l.getAction()) && l.getDetails().contains(reason)));
     }
+
+    @Test
+    @DisplayName("Tax-inclusive product lifecycle: product marked taxInclusive reverse-calculates invoice correctly")
+    void testTaxInclusiveInvoiceCreationLifecycle() {
+        authenticate();
+
+        Product iPhone = new Product();
+        iPhone.setBusiness(business);
+        iPhone.setName("iPhone Pro " + runId);
+        iPhone.setProductType("PRODUCT");
+        iPhone.setStockQuantity(BigDecimal.valueOf(50));
+        iPhone.setPrice(new BigDecimal("164999.00"));
+        iPhone.setGstRate(BigDecimal.valueOf(18));
+        iPhone.setTaxInclusive(true);
+        iPhone = productRepository.save(iPhone);
+
+        // Customer in Karnataka -> Inter-state with Maharashtra (supplier)
+        Customer interstateCust = new Customer();
+        interstateCust.setBusiness(business);
+        interstateCust.setName("Bangalore Tech");
+        interstateCust.setEmail("blore_" + runId + "@test.com");
+        interstateCust.setState("Karnataka");
+        interstateCust = customerRepository.save(interstateCust);
+
+        Invoice invoice = new Invoice();
+        invoice.setCustomerId(interstateCust.getId());
+        invoice.setStatus("ISSUED");
+        invoice.setInvoiceDate(LocalDate.now());
+
+        InvoiceItem item = new InvoiceItem();
+        item.setProductId(iPhone.getId());
+        item.setQuantity(BigDecimal.valueOf(2));
+        // item.setTaxInclusive is left null here to verify it inherits product.isTaxInclusive()
+        invoice.setItems(new ArrayList<>(List.of(item)));
+
+        Invoice created = invoiceService.createInvoice(invoice);
+
+        // Verify grand total, taxable and IGST match exact requirements
+        assertEquals(0, new BigDecimal("329998.00").compareTo(created.getGrandTotal()), "Grand total must be 329998.00");
+        assertEquals(0, new BigDecimal("279659.32").compareTo(created.getTaxableAmount()), "Taxable amount must be 279659.32");
+        assertEquals(0, new BigDecimal("50338.68").compareTo(created.getIgst()), "IGST must be 50338.68");
+        assertEquals(0, new BigDecimal("50338.68").compareTo(created.getTotalTax()), "Total tax must be 50338.68");
+
+        // Verify line item entity
+        InvoiceItem savedItem = created.getItems().get(0);
+        assertTrue(Boolean.TRUE.equals(savedItem.getTaxInclusive()), "Line item taxInclusive must be true");
+        assertEquals(0, new BigDecimal("279659.32").compareTo(savedItem.getTaxableAmount()));
+        assertEquals(0, new BigDecimal("50338.68").compareTo(savedItem.getTaxAmount()));
+        assertEquals(0, new BigDecimal("329998.00").compareTo(savedItem.getTotalAmount()));
+
+        // Also test intra-state invoice with same iPhone (Maharashtra to Maharashtra)
+        Invoice intraInvoice = new Invoice();
+        intraInvoice.setCustomerId(customer.getId()); // customer is in Maharashtra
+        intraInvoice.setStatus("ISSUED");
+        intraInvoice.setInvoiceDate(LocalDate.now());
+
+        InvoiceItem intraItem = new InvoiceItem();
+        intraItem.setProductId(iPhone.getId());
+        intraItem.setQuantity(BigDecimal.valueOf(2));
+        intraInvoice.setItems(new ArrayList<>(List.of(intraItem)));
+
+        Invoice createdIntra = invoiceService.createInvoice(intraInvoice);
+        assertEquals(0, new BigDecimal("329998.00").compareTo(createdIntra.getGrandTotal()));
+        assertEquals(0, new BigDecimal("279659.32").compareTo(createdIntra.getTaxableAmount()));
+        assertEquals(0, new BigDecimal("25169.34").compareTo(createdIntra.getCgst()));
+        assertEquals(0, new BigDecimal("25169.34").compareTo(createdIntra.getSgst()));
+        assertEquals(0, new BigDecimal("50338.68").compareTo(createdIntra.getTotalTax()));
+    }
 }

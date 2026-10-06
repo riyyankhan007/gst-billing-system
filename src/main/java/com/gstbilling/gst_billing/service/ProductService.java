@@ -43,6 +43,10 @@ public class ProductService {
             product.setProductType(product.getProductType().trim().toUpperCase());
         }
 
+        if (product.getTaxInclusive() == null) {
+            product.setTaxInclusive(false);
+        }
+
         product.setBusiness(currentUserService.getCurrentUser().getBusiness());
         return productRepository.save(product);
     }
@@ -109,7 +113,9 @@ public class ProductService {
         if (changes.getDiscount() != null) {
             product.setDiscount(changes.getDiscount());
         }
-        product.setTaxInclusive(changes.isTaxInclusive());
+        if (changes.getTaxInclusive() != null) {
+            product.setTaxInclusive(changes.isTaxInclusive());
+        }
 
         if (changes.getStockQuantity() != null) {
             product.setStockQuantity(changes.getStockQuantity());

@@ -1,6 +1,8 @@
 package com.gstbilling.gst_billing.entity;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 
@@ -30,8 +32,10 @@ public class Product {
 
     private BigDecimal discount = BigDecimal.ZERO;
 
+    @JsonProperty("taxInclusive")
+    @JsonAlias({"isTaxInclusive", "tax_inclusive"})
     @Column(name = "tax_inclusive")
-    private Boolean taxInclusive = false;
+    private Boolean taxInclusive;
 
     @Column(name = "stock_quantity")
     private BigDecimal stockQuantity = BigDecimal.ZERO;
@@ -120,11 +124,11 @@ public class Product {
     }
 
     public Boolean getTaxInclusive() {
-        return Boolean.TRUE.equals(taxInclusive);
+        return taxInclusive;
     }
 
     public void setTaxInclusive(Boolean taxInclusive) {
-        this.taxInclusive = Boolean.TRUE.equals(taxInclusive);
+        this.taxInclusive = taxInclusive;
     }
 
     public BigDecimal getStockQuantity() {

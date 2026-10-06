@@ -271,7 +271,7 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                     title="Return to customer list"
                 >
                     <Icon type="arrowLeft" size={14} />
-                    <span>Back to Customers Directory</span>
+                    <span>Back to Customers</span>
                 </button>
 
                 <div style={{ display: "flex", gap: "10px" }}>
@@ -562,9 +562,12 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                         </div>
 
                         {filteredInvoices.length === 0 ? (
-                            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-                                <Icon type="invoice" size={32} color="#cbd5e1" />
-                                <p style={{ marginTop: "12px", fontSize: "14px", fontWeight: 500 }}>No invoices found matching current criteria.</p>
+                            <div className="empty-state">
+                                <div className="empty-state-icon">
+                                    <Icon type="invoice" size={26} />
+                                </div>
+                                <h3>No invoices found</h3>
+                                <p>No invoices found matching current filter or search criteria.</p>
                             </div>
                         ) : (
                             <table className="table">
@@ -648,9 +651,12 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                 {activeTab === "orders" && (
                     <div>
                         {orderedItems.length === 0 ? (
-                            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-                                <Icon type="product" size={32} color="#cbd5e1" />
-                                <p style={{ marginTop: "12px", fontSize: "14px", fontWeight: 500 }}>No item purchase history available yet.</p>
+                            <div className="empty-state">
+                                <div className="empty-state-icon">
+                                    <Icon type="product" size={26} />
+                                </div>
+                                <h3>No item purchase history</h3>
+                                <p>No item purchase records available for this customer yet.</p>
                             </div>
                         ) : (
                             <table className="table">
@@ -697,9 +703,12 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                 {activeTab === "payments" && (
                     <div>
                         {payments.length === 0 ? (
-                            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-                                <Icon type="payment" size={32} color="#cbd5e1" />
-                                <p style={{ marginTop: "12px", fontSize: "14px", fontWeight: 500 }}>No payments recorded for this customer yet.</p>
+                            <div className="empty-state">
+                                <div className="empty-state-icon">
+                                    <Icon type="payment" size={26} />
+                                </div>
+                                <h3>No payments recorded</h3>
+                                <p>No payments recorded for this customer yet.</p>
                             </div>
                         ) : (
                             <table className="table">

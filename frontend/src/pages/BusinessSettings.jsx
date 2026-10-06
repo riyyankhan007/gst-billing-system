@@ -605,8 +605,9 @@ export default function BusinessSettings() {
                                 Granular permissions: ADMIN, ACCOUNTANT, SALES, and VIEWER
                             </p>
                         </div>
-                        <button className="btn btn-primary" onClick={() => setShowInviteModal(true)}>
-                            + Add Team Member
+                        <button className="primary-button" onClick={() => setShowInviteModal(true)}>
+                            <Icon type="plus" size={13} />
+                            <span>Add Team Member</span>
                         </button>
                     </div>
 

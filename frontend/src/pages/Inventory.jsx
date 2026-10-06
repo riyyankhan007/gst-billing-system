@@ -94,7 +94,8 @@ export default function Inventory() {
                     <p>Real-time stock audit trails, inward purchase additions, and invoice deductions</p>
                 </div>
                 <button className="primary-button" onClick={() => openAdjustModal()} disabled={products.length === 0}>
-                    + Adjust Stock Manually
+                    <Icon type="plus" size={13} />
+                    <span>Adjust Stock Manually</span>
                 </button>
             </div>
 
@@ -181,8 +182,12 @@ export default function Inventory() {
                         <p>Loading inventory history...</p>
                     </div>
                 ) : filteredMovements.length === 0 ? (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-                        <p>No inventory movements recorded yet matching the filters.</p>
+                    <div className="empty-state">
+                        <div className="empty-state-icon">
+                            <Icon type="inventory" size={26} />
+                        </div>
+                        <h3>No stock movements recorded</h3>
+                        <p>Track automatic inward additions from purchases, invoice deductions, or record manual stock adjustments.</p>
                     </div>
                 ) : (
                     <div className="table-container">

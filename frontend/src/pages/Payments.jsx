@@ -187,7 +187,8 @@ export default function Payments({ onSelectInvoice }) {
                         )}
                     </button>
                     <button className="primary-button" onClick={() => openRecordModal()} disabled={invoices.length === 0}>
-                        + Record Payment
+                        <Icon type="plus" size={13} />
+                        <span>Record Payment</span>
                     </button>
                 </div>
             </div>
@@ -263,11 +264,16 @@ export default function Payments({ onSelectInvoice }) {
                         <p>Loading payments...</p>
                     </div>
                 ) : filteredPayments.length === 0 ? (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-                        <p style={{ fontSize: "15px", margin: "0 0 12px" }}>No payment records found.</p>
+                    <div className="empty-state">
+                        <div className="empty-state-icon">
+                            <Icon type="payment" size={26} />
+                        </div>
+                        <h3>No payment records found</h3>
+                        <p>Track collections, issue payment receipts, and reconcile customer balances.</p>
                         {invoices.length > 0 && (
-                            <button className="primary-button action-btn-sm" onClick={() => openRecordModal()}>
-                                Record first payment
+                            <button className="primary-button" onClick={() => openRecordModal()}>
+                                <Icon type="plus" size={13} />
+                                <span>Record First Payment</span>
                             </button>
                         )}
                     </div>

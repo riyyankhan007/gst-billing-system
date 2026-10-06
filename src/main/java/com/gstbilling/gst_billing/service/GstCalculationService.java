@@ -124,7 +124,7 @@ public class GstCalculationService {
 
             if (item.taxInclusive() && gstRate.compareTo(BigDecimal.ZERO) > 0) {
                 // Price already includes GST: taxable = total / (1 + rate/100)
-                BigDecimal divisor = BigDecimal.ONE.add(gstRate.divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP));
+                BigDecimal divisor = BigDecimal.ONE.add(gstRate.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
                 lineTaxable = lineAfterDiscount.divide(divisor, 2, RoundingMode.HALF_UP);
                 lineTax = lineAfterDiscount.subtract(lineTaxable).setScale(2, RoundingMode.HALF_UP);
                 lineTotal = lineAfterDiscount;

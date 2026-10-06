@@ -20,16 +20,44 @@ import CustomerDetails from "./pages/CustomerDetails";
 import Icon from "./components/Icon";
 import "./styles/app.css";
 
+// Hash-based route parser for native browser history (Back / Forward buttons)
+function parseRouteFromHash(hashString) {
+    const raw = (hashString || (typeof window !== "undefined" ? window.location.hash : "") || "").replace(/^#\/?/, "");
+    if (!raw) return { page: "dashboard", invoiceId: null, customerId: null };
+
+    const [pathPart, queryPart] = raw.split("?");
+    const parts = pathPart.split("/").filter(Boolean);
+    const primary = parts[0] || "dashboard";
+    const subId = parts[1] || null;
+
+    const queryParams = new URLSearchParams(queryPart || "");
+    const qId = queryParams.get("id");
+
+    if (primary === "details" || primary === "invoice" || (primary === "invoices" && subId)) {
+        return { page: "details", invoiceId: subId || qId, customerId: null };
+    }
+    if (primary === "customer-details" || primary === "customer" || (primary === "customers" && subId)) {
+        return { page: "customer-details", customerId: subId || qId, invoiceId: null };
+    }
+
+    return {
+        page: primary,
+        invoiceId: qId || null,
+        customerId: qId || null
+    };
+}
+
 function App() {
     const [authenticated, setAuthenticated] = useState(
         Boolean(localStorage.getItem("gstToken"))
     );
 
+    const initialRoute = parseRouteFromHash(typeof window !== "undefined" ? window.location.hash : "");
     const [profile, setProfile] = useState(null);
-    const [page, setPage] = useState("dashboard");
+    const [page, setPage] = useState(initialRoute.page);
     const [invoices, setInvoices] = useState([]);
-    const [selectedInvoiceId, setSelectedInvoiceId] = useState(null);
-    const [selectedCustomerId, setSelectedCustomerId] = useState(null);
+    const [selectedInvoiceId, setSelectedInvoiceId] = useState(initialRoute.invoiceId);
+    const [selectedCustomerId, setSelectedCustomerId] = useState(initialRoute.customerId);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
@@ -87,6 +115,28 @@ function App() {
         }
     }, [authenticated]);
 
+    // Synchronize browser history (Back / Forward buttons) with application state
+    useEffect(() => {
+        if (!authenticated) return;
+
+        const handleHashChange = () => {
+            const route = parseRouteFromHash(window.location.hash);
+            setPage(route.page);
+            if (route.invoiceId !== null) setSelectedInvoiceId(route.invoiceId);
+            if (route.customerId !== null) setSelectedCustomerId(route.customerId);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+        };
+
+        if (window.location.hash) {
+            handleHashChange();
+        } else {
+            window.location.hash = "#/dashboard";
+        }
+
+        window.addEventListener("hashchange", handleHashChange);
+        return () => window.removeEventListener("hashchange", handleHashChange);
+    }, [authenticated]);
+
     if (!authenticated) {
         if (authView === "landing") {
             return (
@@ -110,12 +160,36 @@ function App() {
         setAuthenticated(false);
         setProfile(null);
         setSidebarOpen(false);
+        window.location.hash = "";
     };
 
-    const navigate = (target) => {
-        setPage(target);
+    const navigate = (target, id = null) => {
+        let newPath = `/${target}`;
+        if ((target === "details" || target === "invoices") && id) {
+            newPath = `/invoices/${id}`;
+        } else if ((target === "customer-details" || target === "customers") && id) {
+            newPath = `/customers/${id}`;
+        }
+
+        const targetHash = `#${newPath}`;
+        if (window.location.hash !== targetHash) {
+            window.location.hash = targetHash;
+        } else {
+            const route = parseRouteFromHash(targetHash);
+            setPage(route.page);
+            if (route.invoiceId !== null) setSelectedInvoiceId(route.invoiceId);
+            if (route.customerId !== null) setSelectedCustomerId(route.customerId);
+        }
         setSidebarOpen(false);
         window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    const goBack = (fallback = "dashboard") => {
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            navigate(fallback);
+        }
     };
 
     const navItem = (target, icon, label) => (
@@ -170,8 +244,7 @@ function App() {
 
     const handleQuickRemind = (e, inv) => {
         e.stopPropagation();
-        setSelectedInvoiceId(inv.id);
-        setPage("details");
+        navigate("details", inv.id);
     };
 
     return (
@@ -201,7 +274,8 @@ function App() {
                     onClick={() => navigate("create")}
                     title="New Invoice"
                 >
-                    + Invoice
+                    <Icon type="plus" size={13} />
+                    <span>Invoice</span>
                 </button>
             </header>
 
@@ -342,10 +416,7 @@ function App() {
                     {page === "dashboard" && (
                         <Dashboard
                             onNavigate={navigate}
-                            onSelectInvoice={(id) => {
-                                setSelectedInvoiceId(id);
-                                setPage("details");
-                            }}
+                            onSelectInvoice={(id) => navigate("details", id)}
                         />
                     )}
 
@@ -353,13 +424,12 @@ function App() {
                     {(page === "create" || page === "create-invoice") && (
                         <CreateInvoice
                             onBack={() => {
-                                setPage("invoices");
                                 loadInvoices();
+                                goBack("invoices");
                             }}
                             onCreated={(id) => {
-                                setSelectedInvoiceId(id);
-                                setPage("details");
                                 loadInvoices();
+                                navigate("details", id);
                             }}
                             onNavigate={navigate}
                         />
@@ -370,8 +440,8 @@ function App() {
                         <InvoiceDetails
                             invoiceId={selectedInvoiceId}
                             onBack={() => {
-                                setPage("invoices");
                                 loadInvoices();
+                                goBack("invoices");
                             }}
                         />
                     )}
@@ -451,6 +521,9 @@ function App() {
                                     </div>
                                 ) : invoices.length === 0 ? (
                                     <div className="empty-state">
+                                        <div className="empty-state-icon">
+                                            <Icon type="invoice" size={26} />
+                                        </div>
                                         <h3>No invoices generated yet</h3>
                                         <p>Create your first GST compliant invoice to begin tracking payments and receivables.</p>
                                         <button
@@ -458,12 +531,15 @@ function App() {
                                             className="primary-button"
                                             onClick={() => navigate("create")}
                                         >
-                                            <Icon type="plus" />
+                                            <Icon type="plus" size={13} />
                                             <span>Create First Invoice</span>
                                         </button>
                                     </div>
                                 ) : filteredInvoices.length === 0 ? (
                                     <div className="empty-state">
+                                        <div className="empty-state-icon">
+                                            <Icon type="search" size={26} />
+                                        </div>
                                         <h3>No matching invoices found</h3>
                                         <p>Try clearing your search query or choosing another status filter.</p>
                                     </div>
@@ -487,8 +563,7 @@ function App() {
                                                     <tr
                                                         key={inv.id}
                                                         onClick={() => {
-                                                            setSelectedInvoiceId(inv.id);
-                                                            setPage("details");
+                                                            navigate("details", inv.id);
                                                         }}
                                                     >
                                                         <td className="invoice-number-cell">
@@ -536,9 +611,7 @@ function App() {
                                                                     type="button"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        setSelectedCustomerId(inv.customer.id);
-                                                                        setPage("customer-details");
-                                                                        window.scrollTo({ top: 0, behavior: "smooth" });
+                                                                        navigate("customer-details", inv.customer.id);
                                                                     }}
                                                                     style={{
                                                                         background: "none",
@@ -614,10 +687,7 @@ function App() {
                     {/* Payments */}
                     {page === "payments" && (
                         <Payments
-                            onSelectInvoice={(id) => {
-                                setSelectedInvoiceId(id);
-                                setPage("details");
-                            }}
+                            onSelectInvoice={(id) => navigate("details", id)}
                         />
                     )}
 
@@ -637,14 +707,9 @@ function App() {
                     {page === "customer-details" && (
                         <CustomerDetails
                             customerId={selectedCustomerId}
-                            onBack={() => setPage("customers")}
-                            onSelectInvoice={(id) => {
-                                setSelectedInvoiceId(id);
-                                setPage("details");
-                            }}
-                            onNewInvoice={() => {
-                                setPage("create");
-                            }}
+                            onBack={() => goBack("customers")}
+                            onSelectInvoice={(id) => navigate("details", id)}
+                            onNewInvoice={() => navigate("create")}
                         />
                     )}
 
@@ -652,11 +717,7 @@ function App() {
                     {page === "customers" && (
                         <ManageData
                             kind="customers"
-                            onViewCustomer={(id) => {
-                                setSelectedCustomerId(id);
-                                setPage("customer-details");
-                                window.scrollTo({ top: 0, behavior: "smooth" });
-                            }}
+                            onViewCustomer={(id) => navigate("customer-details", id)}
                         />
                     )}
 

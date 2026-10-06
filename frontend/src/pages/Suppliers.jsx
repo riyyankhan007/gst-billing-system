@@ -136,7 +136,8 @@ export default function Suppliers() {
                     <p>Manage vendor records, GSTINs, and purchase credit histories</p>
                 </div>
                 <button className="primary-button" onClick={() => openModal()}>
-                    + Add Supplier
+                    <Icon type="plus" size={13} />
+                    <span>Add Supplier</span>
                 </button>
             </div>
 
@@ -185,10 +186,15 @@ export default function Suppliers() {
                         <p>Loading suppliers...</p>
                     </div>
                 ) : suppliers.length === 0 ? (
-                    <div style={{ padding: "40px", textAlign: "center", color: "var(--muted)" }}>
-                        <p style={{ margin: "0 0 12px" }}>No suppliers found.</p>
-                        <button className="btn btn-secondary btn-sm" onClick={() => openModal()}>
-                            Add First Supplier
+                    <div className="empty-state">
+                        <div className="empty-state-icon">
+                            <Icon type="supplier" size={26} />
+                        </div>
+                        <h3>No suppliers found</h3>
+                        <p>Maintain vendor directories, track purchase terms, and record inward bills.</p>
+                        <button className="primary-button" onClick={() => openModal()}>
+                            <Icon type="plus" size={13} />
+                            <span>Add First Supplier</span>
                         </button>
                     </div>
                 ) : (

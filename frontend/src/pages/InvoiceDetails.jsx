@@ -355,10 +355,12 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             <div className="invoice-top-nav">
                 <button
                     type="button"
-                    className="invoice-back-link"
+                    className="action-btn-sm"
                     onClick={onBack}
+                    title="Back to Invoices"
                 >
-                    <Icon type="arrowLeft" size={14} /> Back to Invoices
+                    <Icon type="arrowLeft" size={13} />
+                    <span>Back to Invoices</span>
                 </button>
 
                 <div className="invoice-top-nav-actions">
@@ -586,7 +588,14 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                                     <td><strong>{item.productName}</strong></td>
                                     <td>{item.hsnCode || "—"}</td>
                                     <td style={{ textAlign: "center" }}>{item.quantity}</td>
-                                    <td style={{ textAlign: "right" }}>{formatCurrency(item.unitPrice)}</td>
+                                    <td style={{ textAlign: "right" }}>
+                                        {formatCurrency(item.unitPrice)}
+                                        {item.taxInclusive && (
+                                            <span className="badge" style={{ display: "inline-block", fontSize: "10px", marginLeft: "6px", padding: "1px 5px", background: "rgba(59,130,246,0.12)", color: "#1d4ed8" }}>
+                                                Incl.
+                                            </span>
+                                        )}
+                                    </td>
                                     <td style={{ textAlign: "center" }}>{item.gstRate}%</td>
                                     <td style={{ textAlign: "right" }}>{formatCurrency(item.taxAmount)}</td>
                                     <td style={{ textAlign: "right" }}><strong>{formatCurrency(item.totalAmount)}</strong></td>

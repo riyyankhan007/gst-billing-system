@@ -115,6 +115,7 @@ export default function ManageData({ kind, onViewCustomer }) {
                 body.discount = Number(body.discount || 0);
                 body.stockQuantity = Number(body.stockQuantity || 0);
                 body.lowStockThreshold = Number(body.lowStockThreshold || 5);
+                body.taxInclusive = Boolean(body.taxInclusive);
 
                 await createProduct(body);
                 setSuccess(`Product "${body.name}" added successfully!`);
@@ -647,8 +648,24 @@ export default function ManageData({ kind, onViewCustomer }) {
                             <p>Loading records...</p>
                         </div>
                     ) : filteredItems.length === 0 ? (
-                        <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-                            <p>No records found matching filters.</p>
+                        <div className="empty-state">
+                            <div className="empty-state-icon">
+                                <Icon type={isCustomer ? "customer" : "product"} size={26} />
+                            </div>
+                            <h3>No {isCustomer ? "customers" : "products"} found</h3>
+                            <p>
+                                {isCustomer
+                                    ? "Add your client directory with GSTIN, billing address, and contact information."
+                                    : "Add your product catalog items with HSN codes, unit pricing, and standard GST tax rates."}
+                            </p>
+                            <button
+                                type="button"
+                                className="primary-button"
+                                onClick={() => setShowForm(true)}
+                            >
+                                <Icon type="plus" size={13} />
+                                <span>{isCustomer ? "Add First Customer" : "Add First Product"}</span>
+                            </button>
                         </div>
                     ) : isCustomer ? (
                         <table className="table">
@@ -754,6 +771,11 @@ export default function ManageData({ kind, onViewCustomer }) {
                                             </td>
                                             <td className="table-num" style={{ textAlign: "right" }}>
                                                 {fmt(p.price)}
+                                                {p.taxInclusive && (
+                                                    <span className="badge" style={{ display: "inline-block", fontSize: "10px", marginLeft: "6px", padding: "1px 5px", background: "rgba(59,130,246,0.12)", color: "#1d4ed8" }}>
+                                                        Incl.
+                                                    </span>
+                                                )}
                                             </td>
                                             <td style={{ textAlign: "center", fontWeight: 600 }}>
                                                 {p.gstRate}%
