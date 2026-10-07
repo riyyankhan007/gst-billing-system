@@ -372,7 +372,10 @@ public class InvoiceService {
     public List<Invoice> getAllInvoices() {
         Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
         List<Invoice> invoices = invoiceRepository.findByBusiness_IdOrderByInvoiceDateDescIdDesc(businessId);
-        invoices.forEach(this::checkAndUpdateOverdue);
+        invoices.forEach(inv -> {
+            checkAndUpdateOverdue(inv);
+            initializeInvoiceRelations(inv);
+        });
         return invoices;
     }
 
@@ -380,7 +383,10 @@ public class InvoiceService {
     public List<Invoice> searchInvoices(String status, Long customerId) {
         Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
         List<Invoice> invoices = invoiceRepository.searchInvoices(businessId, status, customerId);
-        invoices.forEach(this::checkAndUpdateOverdue);
+        invoices.forEach(inv -> {
+            checkAndUpdateOverdue(inv);
+            initializeInvoiceRelations(inv);
+        });
         return invoices;
     }
 
@@ -392,7 +398,19 @@ public class InvoiceService {
                         new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found or not available to this business")
                 );
         checkAndUpdateOverdue(invoice);
+        initializeInvoiceRelations(invoice);
         return invoice;
+    }
+
+    private void initializeInvoiceRelations(Invoice invoice) {
+        if (invoice != null) {
+            if (invoice.getItems() != null) {
+                invoice.getItems().size();
+            }
+            if (invoice.getCustomer() != null) {
+                invoice.getCustomer().getName();
+            }
+        }
     }
 
     private void checkAndUpdateOverdue(Invoice invoice) {
