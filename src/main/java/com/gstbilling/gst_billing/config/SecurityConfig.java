@@ -43,10 +43,10 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
+        // Disallow wildcard domain patterns; restrict to explicit trusted origins
         config.setAllowedOriginPatterns(List.of(
                 "http://localhost:*",
                 "http://127.0.0.1:*",
-                "https://*.vercel.app",
                 "https://gst-billing-system-five.vercel.app",
                 "https://gst-billing-system-git-main-riyyan.vercel.app"
         ));
@@ -64,9 +64,11 @@ public class SecurityConfig {
             HttpSecurity http,
             CorrelationIdFilter correlationIdFilter,
             JwtAuthenticationFilter jwtFilter,
+            com.gstbilling.gst_billing.security.AuthRateLimitingFilter rateLimitingFilter,
             com.gstbilling.gst_billing.security.IdempotencyFilter idempotencyFilter
     ) throws Exception {
         return http
+                // CSRF disabled safely: API is stateless, uses JWT bearer tokens, and does not use session cookies
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -80,10 +82,9 @@ public class SecurityConfig {
                                 "/api/auth/reset-password",
                                 "/api/webhooks/**",
                                 "/api/health",
-                                "/api/metrics",
-                                "/actuator/health",
-                                "/uploads/**"
+                                "/actuator/health"
                         ).permitAll()
+                        .requestMatchers("/api/metrics").hasAnyRole("OWNER", "ADMIN")
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(e -> e
@@ -94,6 +95,7 @@ public class SecurityConfig {
                             response.getWriter().write("{\"error\":\"Forbidden\",\"message\":\"Access denied: insufficient permissions\"}");
                         })
                 )
+                .addFilterBefore(rateLimitingFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(correlationIdFilter, JwtAuthenticationFilter.class)
                 .addFilterAfter(idempotencyFilter, JwtAuthenticationFilter.class)

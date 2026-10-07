@@ -27,7 +27,15 @@ target/
 /.nb-gradle/
 build/
 !**/src/main/**/build/
-!**/src/test/**/build/
-
 ### VS Code ###
 .vscode/
+
+### Secrets and Environment ###
+.env
+.env.*
+*.pem
+*.key
+
+### User Uploads and Attachments ###
+uploads/
+

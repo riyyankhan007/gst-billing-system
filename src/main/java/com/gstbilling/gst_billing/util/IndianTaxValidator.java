@@ -201,4 +201,28 @@ public final class IndianTaxValidator {
         }
         return null;
     }
+
+    private static final java.util.Set<java.math.BigDecimal> VALID_GST_RATES = java.util.Set.of(
+            java.math.BigDecimal.valueOf(0),
+            new java.math.BigDecimal("0.1"),
+            new java.math.BigDecimal("0.25"),
+            new java.math.BigDecimal("1.5"),
+            java.math.BigDecimal.valueOf(3),
+            java.math.BigDecimal.valueOf(5),
+            java.math.BigDecimal.valueOf(6),
+            java.math.BigDecimal.valueOf(12),
+            java.math.BigDecimal.valueOf(18),
+            java.math.BigDecimal.valueOf(28)
+    );
+
+    public static boolean isValidGstRate(java.math.BigDecimal rate) {
+        if (rate == null) return false;
+        java.math.BigDecimal stripped = rate.stripTrailingZeros();
+        for (java.math.BigDecimal valid : VALID_GST_RATES) {
+            if (stripped.compareTo(valid.stripTrailingZeros()) == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

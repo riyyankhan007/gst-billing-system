@@ -64,8 +64,8 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
             return;
         }
 
-        if (form.password.length < 6) {
-            setError("Password must be at least 6 characters long");
+        if (form.password.length < 8 || !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(form.password)) {
+            setError("Password must be at least 8 characters and include uppercase, lowercase, and a number");
             setLoading(false);
             return;
         }
@@ -388,16 +388,16 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
                     <form onSubmit={handleResetPassword}>
                         <div className="form-field">
                             <label htmlFor="reset-token">
-                                6-Digit Verification Code <span className="req-star">*</span>
+                                Verification Code <span className="req-star">*</span>
                             </label>
                             <input
                                 id="reset-token"
                                 name="token"
-                                placeholder="e.g. 123456"
+                                placeholder="Enter verification code"
                                 value={form.token}
                                 onChange={handleChange}
-                                maxLength={10}
-                                style={{ letterSpacing: "3px", textAlign: "center", fontSize: "18px", fontWeight: "bold" }}
+                                maxLength={64}
+                                style={{ letterSpacing: "2px", textAlign: "center", fontSize: "16px", fontWeight: "bold" }}
                                 required
                             />
                         </div>

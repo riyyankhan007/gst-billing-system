@@ -66,7 +66,18 @@ public class UserManagementService {
         User user = new User();
         user.setName(req.name() != null ? req.name().trim() : "Team Member");
         user.setEmail(req.email().trim().toLowerCase());
-        user.setPassword(passwordEncoder.encode(req.password() != null && !req.password().isBlank() ? req.password() : "Password@123"));
+
+        String rawPassword;
+        if (req.password() != null && !req.password().isBlank()) {
+            if (req.password().length() < 8) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters");
+            }
+            rawPassword = req.password();
+        } else {
+            rawPassword = generateSecureTemporaryPassword();
+        }
+
+        user.setPassword(passwordEncoder.encode(rawPassword));
         user.setBusiness(business);
         user.setUserRole(requestedRole);
 
@@ -102,5 +113,15 @@ public class UserManagementService {
         auditLogService.logAction("UPDATE_USER_ROLE", "USER", saved.getId(),
                 "User " + saved.getEmail() + " role updated to " + saved.getRole());
         return new UserDto(saved.getId(), saved.getName(), saved.getEmail(), saved.getRole());
+    }
+
+    private String generateSecureTemporaryPassword() {
+        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+        java.security.SecureRandom random = new java.security.SecureRandom();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 16; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
     }
 }

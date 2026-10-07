@@ -28,7 +28,8 @@ public class InvoiceController {
 
     @PostMapping
     @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES')")
-    public ResponseEntity<Invoice> createInvoice(@RequestBody Invoice invoice) {
+    public ResponseEntity<Invoice> createInvoice(@jakarta.validation.Valid @RequestBody com.gstbilling.gst_billing.dto.CreateInvoiceRequest request) {
+        Invoice invoice = mapToEntity(request);
         Invoice created = invoiceService.createInvoice(invoice);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
@@ -53,8 +54,40 @@ public class InvoiceController {
 
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES')")
-    public Invoice updateDraftInvoice(@PathVariable Long id, @RequestBody Invoice invoice) {
+    public Invoice updateDraftInvoice(@PathVariable Long id, @jakarta.validation.Valid @RequestBody com.gstbilling.gst_billing.dto.CreateInvoiceRequest request) {
+        Invoice invoice = mapToEntity(request);
         return invoiceService.updateDraftInvoice(id, invoice);
+    }
+
+    private Invoice mapToEntity(com.gstbilling.gst_billing.dto.CreateInvoiceRequest request) {
+        Invoice invoice = new Invoice();
+        invoice.setCustomerId(request.customerId());
+        invoice.setInvoiceDate(request.invoiceDate());
+        invoice.setDueDate(request.dueDate());
+        invoice.setInvoiceNumber(request.invoiceNumber());
+        invoice.setDiscountAmount(request.discountAmount() != null ? request.discountAmount() : java.math.BigDecimal.ZERO);
+        invoice.setReverseCharge(request.reverseCharge());
+        invoice.setExportType(request.exportType());
+        invoice.setNotes(request.notes());
+        invoice.setTermsAndConditions(request.termsAndConditions());
+        invoice.setStatus(request.status());
+
+        if (request.items() != null) {
+            List<com.gstbilling.gst_billing.entity.InvoiceItem> items = request.items().stream().map(i -> {
+                com.gstbilling.gst_billing.entity.InvoiceItem item = new com.gstbilling.gst_billing.entity.InvoiceItem();
+                item.setProductId(i.productId());
+                item.setProductName(i.productName());
+                item.setHsnCode(i.hsnCode());
+                item.setQuantity(i.quantity());
+                item.setUnitPrice(i.unitPrice());
+                item.setGstRate(i.gstRate());
+                item.setDiscount(i.discount() != null ? i.discount() : java.math.BigDecimal.ZERO);
+                item.setTaxInclusive(i.isTaxInclusive());
+                return item;
+            }).toList();
+            invoice.setItems(items);
+        }
+        return invoice;
     }
 
     @PutMapping("/{id}/issue")

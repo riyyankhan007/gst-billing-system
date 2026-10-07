@@ -25,9 +25,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         try {
             String header = request.getHeader("Authorization");
+            String token = null;
             if (header != null && header.startsWith("Bearer ")) {
+                token = header.substring(7);
+            } else if (request.getParameter("token") != null && !request.getParameter("token").isBlank()) {
+                token = request.getParameter("token");
+            }
+
+            if (token != null) {
                 try {
-                    String token = header.substring(7);
                     String email = jwtService.extractEmail(token);
                     String role = jwtService.extractRole(token);
                     Long tenantId = jwtService.extractTenantId(token);
@@ -39,7 +45,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     String roleName = (role != null && !role.isBlank()) ? role.toUpperCase() : "VIEWER";
                     List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority("ROLE_" + roleName));
                     SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(email, null, authorities));
-                } catch (Exception ignored) { }
+                } catch (Exception ex) {
+                    logger.warn("JWT authentication failed: " + ex.getMessage());
+                    SecurityContextHolder.clearContext();
+                    TenantContext.clear();
+                }
             }
             chain.doFilter(request, response);
         } finally {

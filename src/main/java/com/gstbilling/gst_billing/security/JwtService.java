@@ -14,6 +14,9 @@ public class JwtService {
     private final long expirationMs;
 
     public JwtService(@Value("${app.jwt.secret}") String secret, @Value("${app.jwt.expiration-ms}") long expirationMs) {
+        if (secret == null || secret.trim().getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT secret must be configured via APP_JWT_SECRET and contain at least 256 bits (32 bytes)");
+        }
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationMs = expirationMs;
     }

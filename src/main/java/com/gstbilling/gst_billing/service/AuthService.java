@@ -117,12 +117,17 @@ public class AuthService {
     public MessageResponse forgotPassword(ForgotPasswordRequest request) {
         String cleanEmail = request.email().trim().toLowerCase();
         users.findByEmailIgnoreCase(cleanEmail).ifPresent(user -> {
-            // Generate a 6-digit verification code
+            // Generate a cryptographically secure 8-character high-entropy verification code (>1 trillion possibilities)
             SecureRandom random = new SecureRandom();
-            String token = String.format("%06d", random.nextInt(1000000));
+            String chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+            StringBuilder sb = new StringBuilder(8);
+            for (int i = 0; i < 8; i++) {
+                sb.append(chars.charAt(random.nextInt(chars.length())));
+            }
+            String token = sb.toString();
 
             user.setResetPasswordToken(token);
-            user.setResetPasswordExpiresAt(LocalDateTime.now().plusMinutes(30));
+            user.setResetPasswordExpiresAt(LocalDateTime.now().plusMinutes(15));
             users.save(user);
 
             emailService.sendPasswordResetEmail(user.getEmail(), user.getName(), token);

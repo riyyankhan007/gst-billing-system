@@ -47,6 +47,7 @@ public class Business {
     @Column(name = "bank_name")
     private String bankName;
 
+    @jakarta.persistence.Convert(converter = com.gstbilling.gst_billing.util.EncryptedStringConverter.class)
     @Column(name = "bank_account_number")
     private String bankAccountNumber;
 

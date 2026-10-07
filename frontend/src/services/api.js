@@ -9,7 +9,12 @@ export function getAssetUrl(path) {
         return path;
     }
     const apiHost = API_BASE_URL.replace(/\/api\/?$/, "");
-    return `${apiHost}${path.startsWith("/") ? "" : "/"}${path}`;
+    const url = `${apiHost}${path.startsWith("/") ? "" : "/"}${path}`;
+    const tok = token();
+    if (tok && (path.startsWith("/uploads/") || path.startsWith("uploads/"))) {
+        return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(tok)}`;
+    }
+    return url;
 }
 
 async function request(path, options = {}) {

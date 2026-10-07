@@ -1,6 +1,8 @@
 package com.gstbilling.gst_billing.security;
 
 import com.gstbilling.gst_billing.controller.*;
+import com.gstbilling.gst_billing.dto.CreateInvoiceRequest;
+import com.gstbilling.gst_billing.dto.InvoiceItemRequest;
 import com.gstbilling.gst_billing.dto.LoginRequest;
 import com.gstbilling.gst_billing.dto.PaymentRequest;
 import com.gstbilling.gst_billing.entity.*;
@@ -210,9 +212,10 @@ class RbacSecurityTest {
         assertNotNull(customerController.getAllCustomers(null, null));
 
         // CANNOT create invoice
-        Invoice newInv = new Invoice();
-        newInv.setCustomerId(customer.getId());
-        newInv.setInvoiceDate(LocalDate.now());
+        CreateInvoiceRequest newInv = new CreateInvoiceRequest(
+                customer.getId(), LocalDate.now(), null, null, BigDecimal.ZERO, false, null, null, null, "DRAFT",
+                List.of(new InvoiceItemRequest(product.getId(), null, null, BigDecimal.ONE, null, null, BigDecimal.ZERO, false))
+        );
         assertThrows(AccessDeniedException.class, () -> invoiceController.createInvoice(newInv));
 
         // CANNOT delete invoice
@@ -242,13 +245,10 @@ class RbacSecurityTest {
         authenticateAs(salesUser);
 
         // CAN create invoice
-        Invoice newInv = new Invoice();
-        newInv.setCustomerId(customer.getId());
-        newInv.setInvoiceDate(LocalDate.now());
-        InvoiceItem item = new InvoiceItem();
-        item.setProductId(product.getId());
-        item.setQuantity(BigDecimal.ONE);
-        newInv.setItems(List.of(item));
+        CreateInvoiceRequest newInv = new CreateInvoiceRequest(
+                customer.getId(), LocalDate.now(), null, null, BigDecimal.ZERO, false, null, null, null, "DRAFT",
+                List.of(new InvoiceItemRequest(product.getId(), null, null, BigDecimal.ONE, null, null, BigDecimal.ZERO, false))
+        );
 
         var resp = invoiceController.createInvoice(newInv);
         assertNotNull(resp.getBody());
@@ -281,13 +281,10 @@ class RbacSecurityTest {
         authenticateAs(accountantUser);
 
         // CAN create invoice
-        Invoice newInv = new Invoice();
-        newInv.setCustomerId(customer.getId());
-        newInv.setInvoiceDate(LocalDate.now());
-        InvoiceItem item = new InvoiceItem();
-        item.setProductId(product.getId());
-        item.setQuantity(BigDecimal.valueOf(2));
-        newInv.setItems(List.of(item));
+        CreateInvoiceRequest newInv = new CreateInvoiceRequest(
+                customer.getId(), LocalDate.now(), null, null, BigDecimal.ZERO, false, null, null, null, "DRAFT",
+                List.of(new InvoiceItemRequest(product.getId(), null, null, BigDecimal.valueOf(2), null, null, BigDecimal.ZERO, false))
+        );
 
         var resp = invoiceController.createInvoice(newInv);
         assertNotNull(resp.getBody());
@@ -321,9 +318,10 @@ class RbacSecurityTest {
         assertNotNull(invoiceController.getAllInvoices(null, null));
 
         // CANNOT create invoice
-        Invoice newInv = new Invoice();
-        newInv.setCustomerId(customer.getId());
-        newInv.setInvoiceDate(LocalDate.now());
+        CreateInvoiceRequest newInv = new CreateInvoiceRequest(
+                customer.getId(), LocalDate.now(), null, null, BigDecimal.ZERO, false, null, null, null, "DRAFT",
+                List.of(new InvoiceItemRequest(product.getId(), null, null, BigDecimal.ONE, null, null, BigDecimal.ZERO, false))
+        );
         assertThrows(AccessDeniedException.class, () -> invoiceController.createInvoice(newInv));
 
         // CANNOT record payment
