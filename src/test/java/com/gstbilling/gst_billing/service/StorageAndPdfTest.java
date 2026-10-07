@@ -5,7 +5,6 @@ import com.gstbilling.gst_billing.repository.*;
 import com.gstbilling.gst_billing.security.CorrelationContext;
 import com.gstbilling.gst_billing.security.TenantContext;
 import com.gstbilling.gst_billing.storage.LocalStorageService;
-import com.gstbilling.gst_billing.storage.S3StorageService;
 import com.gstbilling.gst_billing.storage.StorageService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

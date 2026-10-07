@@ -11,7 +11,10 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
 @Service
-@ConditionalOnProperty(name = "app.storage.provider", havingValue = "local", matchIfMissing = true)
+@org.springframework.boot.autoconfigure.condition.ConditionalOnExpression(
+    "'${app.storage.provider:auto}'.equalsIgnoreCase('local') || " +
+    "('${app.storage.provider:auto}'.equalsIgnoreCase('auto') && '${R2_ACCESS_KEY_ID:${r2.access-key-id:}}'.isEmpty())"
+)
 public class LocalStorageService implements StorageService {
 
     private final Path baseDirectory;
