@@ -82,7 +82,9 @@ public class SecurityConfig {
                                 "/api/auth/reset-password",
                                 "/api/webhooks/**",
                                 "/api/health",
-                                "/actuator/health"
+                                "/api/ping",
+                                "/actuator/health",
+                                "/uploads/**"
                         ).permitAll()
                         .requestMatchers("/api/metrics").hasAnyRole("OWNER", "ADMIN")
                         .anyRequest().authenticated()

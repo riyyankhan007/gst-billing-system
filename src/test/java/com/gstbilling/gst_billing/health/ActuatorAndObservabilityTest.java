@@ -79,6 +79,16 @@ class ActuatorAndObservabilityTest {
     }
 
     @Test
+    @DisplayName("HealthController exposes /api/ping returning HTTP 200 OK with status UP and pong")
+    void testPingControllerEndpoint() {
+        ResponseEntity<Map<String, String>> resp = healthController.ping();
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        assertNotNull(resp.getBody());
+        assertEquals("UP", resp.getBody().get("status"));
+        assertEquals("pong", resp.getBody().get("message"));
+    }
+
+    @Test
     @DisplayName("HealthController exposes /api/metrics returning HTTP 200 OK")
     void testMetricsControllerEndpoint() {
         ResponseEntity<Map<String, Object>> resp = healthController.getMetrics();

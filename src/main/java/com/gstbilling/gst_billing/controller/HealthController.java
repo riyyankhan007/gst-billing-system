@@ -28,6 +28,11 @@ public class HealthController {
         return ResponseEntity.status(status).body(health);
     }
 
+    @GetMapping("/ping")
+    public ResponseEntity<Map<String, String>> ping() {
+        return ResponseEntity.ok(Map.of("status", "UP", "message", "pong"));
+    }
+
     @GetMapping("/metrics")
     public ResponseEntity<Map<String, Object>> getMetrics() {
         return ResponseEntity.ok(healthService.getMetrics());

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getInvoices, getProfile, downloadInvoicePdf } from "./services/api";
+import { getInvoices, getProfile, downloadInvoicePdf, pingServer } from "./services/api";
 
 import Dashboard from "./pages/Dashboard";
 import CreateInvoice from "./pages/CreateInvoice";
@@ -84,6 +84,31 @@ function App() {
         }
         window.addEventListener("auth-expired", handleExpired);
         return () => window.removeEventListener("auth-expired", handleExpired);
+    }, []);
+
+    // Keep-alive ping every 60 seconds to prevent Render free-tier backend from sleeping
+    useEffect(() => {
+        // Initial ping on load
+        pingServer();
+
+        // Recurring ping every 60 seconds
+        const intervalId = setInterval(() => {
+            pingServer();
+        }, 60 * 1000);
+
+        // Ping when user returns to this browser tab
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                pingServer();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+
+        return () => {
+            clearInterval(intervalId);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
+        };
     }, []);
 
     const loadProfile = async () => {

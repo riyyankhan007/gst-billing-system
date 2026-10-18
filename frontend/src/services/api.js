@@ -9,12 +9,7 @@ export function getAssetUrl(path) {
         return path;
     }
     const apiHost = API_BASE_URL.replace(/\/api\/?$/, "");
-    const url = `${apiHost}${path.startsWith("/") ? "" : "/"}${path}`;
-    const tok = token();
-    if (tok && (path.startsWith("/uploads/") || path.startsWith("uploads/"))) {
-        return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(tok)}`;
-    }
-    return url;
+    return `${apiHost}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
 async function request(path, options = {}) {
@@ -524,3 +519,66 @@ export const getAnalytics = (range = "MONTH", startDate = null, endDate = null) 
     const qs = params.toString();
     return json(`/analytics${qs ? `?${qs}` : ""}`);
 };
+
+// =========================
+// SYSTEM KEEP-ALIVE (RENDER ANTI-SLEEP)
+// =========================
+
+export const pingServer = async () => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/ping`, {
+            method: "GET",
+            headers: {
+                "Cache-Control": "no-cache",
+                "Pragma": "no-cache"
+            }
+        });
+        return response.ok;
+    } catch {
+        // Silently swallow errors during background pings so UI is uninterrupted
+        return false;
+    }
+};
+
+// =========================
+// HSN / SAC CATALOGUE
+// =========================
+
+export const searchHsnSac = (query = "", type = "HSN", page = 0, size = 20, signal = null) => {
+    const params = new URLSearchParams();
+    if (query) params.append("q", query);
+    if (type) params.append("type", type);
+    params.append("page", page);
+    params.append("size", size);
+    return json(`/hsn-sac/search?${params.toString()}`, { signal });
+};
+
+export const getHsnSacById = (id) =>
+    json(`/hsn-sac/${id}`);
+
+export const getHsnSacByCode = (code, type = "HSN") => {
+    const params = new URLSearchParams({ type });
+    return json(`/hsn-sac/code/${encodeURIComponent(code)}?${params.toString()}`);
+};
+
+export const validateHsnSac = (code, type = "HSN") => {
+    const params = new URLSearchParams({ code, type });
+    return json(`/hsn-sac/validate?${params.toString()}`);
+};
+
+export const importHsnSacCsv = (fileOrText, source = "CBIC_OFFICIAL_IMPORT", version = "v1.0") => {
+    if (fileOrText instanceof File) {
+        const form = new FormData();
+        form.append("file", fileOrText);
+        return json(`/hsn-sac/admin/import?source=${encodeURIComponent(source)}&version=${encodeURIComponent(version)}`, {
+            method: "POST",
+            body: form
+        });
+    } else {
+        return json(`/hsn-sac/admin/import?source=${encodeURIComponent(source)}&version=${encodeURIComponent(version)}`, {
+            method: "POST",
+            body: JSON.stringify({ csvData: fileOrText })
+        });
+    }
+};
+

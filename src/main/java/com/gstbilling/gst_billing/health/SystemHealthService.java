@@ -118,30 +118,55 @@ public class SystemHealthService {
 
     private ComponentHealth checkStorage() {
         try {
-            File dir = new File("uploads");
-            boolean exists = dir.exists() || dir.mkdirs();
-            boolean canWrite = dir.canWrite();
-            long freeSpaceMb = dir.getFreeSpace() / (1024 * 1024);
+            String provider = storageService.getProviderName();
+            boolean healthy = storageService.isHealthy();
 
-            if (!exists || !canWrite) {
+            if ("R2".equalsIgnoreCase(provider)) {
+                if (healthy) {
+                    return new ComponentHealth(
+                            HealthStatus.UP,
+                            "Cloudflare R2 object storage connected and operational",
+                            Map.of(
+                                    "provider", "Cloudflare R2 (S3-compatible)",
+                                    "status", "CONNECTED"
+                            )
+                    );
+                } else {
+                    return new ComponentHealth(
+                            HealthStatus.DOWN,
+                            "Cloudflare R2 storage unreachable or bucket access denied",
+                            Map.of(
+                                    "provider", "Cloudflare R2",
+                                    "status", "UNREACHABLE"
+                            )
+                    );
+                }
+            } else {
+                File dir = new File("uploads");
+                boolean exists = dir.exists() || dir.mkdirs();
+                boolean canWrite = dir.canWrite();
+                long freeSpaceMb = dir.getFreeSpace() / (1024 * 1024);
+
+                if (!exists || !canWrite || !healthy) {
+                    return new ComponentHealth(
+                            HealthStatus.DOWN,
+                            "Local storage upload directory is unavailable or not writable",
+                            Map.of("provider", "LOCAL", "path", dir.getAbsolutePath())
+                    );
+                }
+
                 return new ComponentHealth(
-                        HealthStatus.DOWN,
-                        "Storage upload directory is unavailable or not writable",
-                        Map.of("path", dir.getAbsolutePath())
+                        HealthStatus.UP,
+                        "Local document storage operational",
+                        Map.of(
+                                "provider", "Local Disk",
+                                "freeSpaceMb", freeSpaceMb,
+                                "directory", dir.getAbsolutePath()
+                        )
                 );
             }
-
-            return new ComponentHealth(
-                    HealthStatus.UP,
-                    "Document storage operational",
-                    Map.of(
-                            "storageType", "LocalStorage / Hybrid S3",
-                            "freeSpaceMb", freeSpaceMb,
-                            "directory", dir.getAbsolutePath()
-                    )
-            );
         } catch (Exception e) {
-            return new ComponentHealth(HealthStatus.DOWN, e.getMessage(), Map.of());
+            return new ComponentHealth(HealthStatus.DOWN, "Storage check error: " + e.getMessage(), Map.of());
         }
     }
 

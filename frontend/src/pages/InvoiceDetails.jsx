@@ -605,6 +605,60 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                     </table>
                 </div>
 
+                {/* Statutory HSN/SAC Tax Summary Breakdown */}
+                {invoice.items && invoice.items.length > 0 && (
+                    <div style={{ marginTop: "16px", padding: "12px", background: "var(--bg-secondary)", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+                        <div style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px", color: "var(--text-muted)", marginBottom: "8px" }}>
+                            Statutory HSN / SAC Tax Summary
+                        </div>
+                        <div className="table-responsive">
+                            <table className="table" style={{ fontSize: "12px", margin: 0 }}>
+                                <thead>
+                                    <tr>
+                                        <th>HSN / SAC</th>
+                                        <th style={{ textAlign: "right" }}>Taxable Value</th>
+                                        <th style={{ textAlign: "center" }}>GST Rate</th>
+                                        <th style={{ textAlign: "right" }}>Central Tax (CGST)</th>
+                                        <th style={{ textAlign: "right" }}>State Tax (SGST)</th>
+                                        <th style={{ textAlign: "right" }}>Integrated Tax (IGST)</th>
+                                        <th style={{ textAlign: "right" }}>Total Tax Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.entries(
+                                        invoice.items.reduce((acc, it) => {
+                                            const code = it.hsnCode || "UNCLASSIFIED";
+                                            if (!acc[code]) {
+                                                acc[code] = { taxable: 0, tax: 0, rate: it.gstRate || 0 };
+                                            }
+                                            acc[code].taxable += Number(it.taxableAmount || 0);
+                                            acc[code].tax += Number(it.taxAmount || 0);
+                                            return acc;
+                                        }, {})
+                                    ).map(([code, data]) => {
+                                        const isIntra = Number(invoice.cgst || 0) > 0 || Number(invoice.sgst || 0) > 0;
+                                        const cgstAmt = isIntra ? data.tax / 2 : 0;
+                                        const sgstAmt = isIntra ? data.tax / 2 : 0;
+                                        const igstAmt = isIntra ? 0 : data.tax;
+
+                                        return (
+                                            <tr key={code}>
+                                                <td style={{ fontFamily: "monospace", fontWeight: "700" }}>{code}</td>
+                                                <td style={{ textAlign: "right" }}>{formatCurrency(data.taxable)}</td>
+                                                <td style={{ textAlign: "center" }}>{data.rate}%</td>
+                                                <td style={{ textAlign: "right" }}>{isIntra ? formatCurrency(cgstAmt) : "—"}</td>
+                                                <td style={{ textAlign: "right" }}>{isIntra ? formatCurrency(sgstAmt) : "—"}</td>
+                                                <td style={{ textAlign: "right" }}>{!isIntra ? formatCurrency(igstAmt) : "—"}</td>
+                                                <td style={{ textAlign: "right", fontWeight: "600" }}>{formatCurrency(data.tax)}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
                 {/* Totals & Notes Section */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginTop: "24px" }}>
                     {/* Left: Amount in Words, Bank Details, Terms */}

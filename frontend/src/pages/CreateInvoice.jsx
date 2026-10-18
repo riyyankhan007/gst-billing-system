@@ -406,7 +406,7 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
                                                 <option value="">Select Product *</option>
                                                 {products.map(p => (
                                                     <option key={p.id} value={p.id}>
-                                                        {p.name} — ₹{p.price} ({p.gstRate}% GST{p.taxInclusive ? " · Incl." : ""})
+                                                        {p.name}{p.hsnCode ? ` [${p.productType === "SERVICE" ? "SAC" : "HSN"}: ${p.hsnCode}]` : ""} — ₹{p.price} ({p.gstRate}% GST{p.taxInclusive ? " · Incl." : ""})
                                                     </option>
                                                 ))}
                                             </select>

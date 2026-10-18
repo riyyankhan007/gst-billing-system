@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import Icon from "../components/Icon";
+import HsnSacAutocomplete from "../components/HsnSacAutocomplete";
+import HsnSacAdminImport from "../components/HsnSacAdminImport";
 import {
     createCustomer,
     createProduct,
@@ -25,10 +27,10 @@ export default function ManageData({ kind, onViewCustomer }) {
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
+    const [showImportModal, setShowImportModal] = useState(false);
 
     // Customer Details modal
     const [selectedCustomerDetails, setSelectedCustomerDetails] = useState(null);
-    const [detailsLoading, setDetailsLoading] = useState(false);
 
     const loadData = async () => {
         try {
@@ -63,6 +65,7 @@ export default function ManageData({ kind, onViewCustomer }) {
             productType: "PRODUCT",
             sku: "",
             hsnCode: "",
+            classificationDescription: "",
             price: "",
             gstRate: 18,
             unit: "PCS",
@@ -141,6 +144,7 @@ export default function ManageData({ kind, onViewCustomer }) {
                 productType: "PRODUCT",
                 sku: "",
                 hsnCode: "",
+                classificationDescription: "",
                 price: "",
                 gstRate: 18,
                 unit: "PCS",
@@ -221,15 +225,28 @@ export default function ManageData({ kind, onViewCustomer }) {
                             : "Define catalog items, HSN/SAC codes, standard GST rates, and inventory stock."}
                     </p>
                 </div>
-                <button
-                    type="button"
-                    className={showForm ? "secondary-button" : "primary-button"}
-                    onClick={() => setShowForm(!showForm)}
-                    style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
-                >
-                    {showForm ? <Icon type="close" size={14} /> : <Icon type="plus" size={14} />}
-                    <span>{showForm ? "Hide Form" : isCustomer ? "Add New Customer" : "Add New Item"}</span>
-                </button>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                    {!isCustomer && (
+                        <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => setShowImportModal(true)}
+                            style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+                        >
+                            <Icon type="download" size={14} />
+                            <span>Import Official HSN/SAC</span>
+                        </button>
+                    )}
+                    <button
+                        type="button"
+                        className={showForm ? "secondary-button" : "primary-button"}
+                        onClick={() => setShowForm(!showForm)}
+                        style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}
+                    >
+                        {showForm ? <Icon type="close" size={14} /> : <Icon type="plus" size={14} />}
+                        <span>{showForm ? "Hide Form" : isCustomer ? "Add New Customer" : "Add New Item"}</span>
+                    </button>
+                </div>
             </div>
 
             {/* Error & Success Banners */}
@@ -472,17 +489,24 @@ export default function ManageData({ kind, onViewCustomer }) {
                                 {/* Section 2: Pricing & Taxation */}
                                 <div className="form-section-divider">
                                     <h4 className="form-section-title">2. Pricing & GST Taxation</h4>
-                                    <span className="form-section-subtitle">Tax rates, measurement units, and price settings</span>
+                                    <span className="form-section-subtitle">Tax rates, measurement units, and official HSN/SAC classification</span>
                                 </div>
                                 <div className="form-grid-4">
-                                    <div className="form-field">
-                                        <label>HSN / SAC Code</label>
-                                        <input
-                                            type="text"
-                                            className="form-control"
+                                    <div className="form-field col-span-2">
+                                        <label>Official {form.productType === "SERVICE" ? "SAC" : "HSN"} Code & Classification</label>
+                                        <HsnSacAutocomplete
                                             value={form.hsnCode || ""}
-                                            onChange={e => handleInputChange("hsnCode", e.target.value)}
-                                            placeholder="e.g. 8471 or 9983"
+                                            type={form.productType === "SERVICE" ? "SAC" : "HSN"}
+                                            officialDescription={form.classificationDescription || ""}
+                                            onChange={(code, description, verifiedRate) => {
+                                                setForm(prev => ({
+                                                    ...prev,
+                                                    hsnCode: code,
+                                                    classificationDescription: description,
+                                                    ...(verifiedRate != null ? { gstRate: verifiedRate } : {})
+                                                }));
+                                                if (error) setError("");
+                                            }}
                                         />
                                     </div>
                                     <div className="form-field">
@@ -767,7 +791,12 @@ export default function ManageData({ kind, onViewCustomer }) {
                                                 </span>
                                             </td>
                                             <td style={{ letterSpacing: "0.2px" }}>
-                                                {p.sku ? `${p.sku} / ` : ""}{p.hsnCode || "—"}
+                                                <div>{p.sku ? `${p.sku} / ` : ""}<strong style={{ fontFamily: "monospace" }}>{p.hsnCode || "—"}</strong></div>
+                                                {p.classificationDescription && (
+                                                    <div style={{ fontSize: "11px", color: "var(--text-muted)", maxWidth: "200px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={p.classificationDescription}>
+                                                        {p.classificationDescription}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="table-num" style={{ textAlign: "right" }}>
                                                 {fmt(p.price)}
@@ -901,6 +930,18 @@ export default function ManageData({ kind, onViewCustomer }) {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Administrator HSN/SAC Catalogue Bulk Import Modal */}
+            {showImportModal && (
+                <HsnSacAdminImport
+                    onClose={() => setShowImportModal(false)}
+                    onImportSuccess={(res) => {
+                        setShowImportModal(false);
+                        setSuccess(`Catalogue import successful: ${res.insertedRecords} new records added, ${res.updatedRecords} updated.`);
+                        loadData();
+                    }}
+                />
             )}
         </div>
     );

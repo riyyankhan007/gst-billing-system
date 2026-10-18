@@ -22,6 +22,12 @@ public class Product {
     @Column(name = "hsn_code")
     private String hsnCode;
 
+    @Column(name = "hsn_sac_id")
+    private Long hsnSacId;
+
+    @Column(name = "classification_description")
+    private String classificationDescription;
+
     private String unit = "PCS";
 
     @Column(nullable = false)
@@ -169,5 +175,21 @@ public class Product {
 
     public void setBusiness(Business business) {
         this.business = business;
+    }
+
+    public Long getHsnSacId() {
+        return hsnSacId;
+    }
+
+    public void setHsnSacId(Long hsnSacId) {
+        this.hsnSacId = hsnSacId;
+    }
+
+    public String getClassificationDescription() {
+        return classificationDescription;
+    }
+
+    public void setClassificationDescription(String classificationDescription) {
+        this.classificationDescription = classificationDescription;
     }
 }

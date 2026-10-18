@@ -14,19 +14,24 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 
+import com.gstbilling.gst_billing.storage.StorageService;
+
 @Service
 public class BusinessService {
 
     private final BusinessRepository businessRepository;
     private final CurrentUserService currentUserService;
     private final AuditLogService auditLogService;
+    private final StorageService storageService;
 
     public BusinessService(BusinessRepository businessRepository,
                            CurrentUserService currentUserService,
-                           AuditLogService auditLogService) {
+                           AuditLogService auditLogService,
+                           StorageService storageService) {
         this.businessRepository = businessRepository;
         this.currentUserService = currentUserService;
         this.auditLogService = auditLogService;
+        this.storageService = storageService;
     }
 
     @Transactional(readOnly = true)
@@ -154,36 +159,36 @@ public class BusinessService {
     @Transactional
     public Business saveLogo(MultipartFile file) {
         String ext = validateAndExtractExtension(file);
-        String filename = "business-" + getBusiness().getId() + "-logo-" + System.currentTimeMillis() + ext;
+        Business business = getBusiness();
+        String filename = "business-" + business.getId() + "-logo-" + System.currentTimeMillis() + ext;
+        String storageKey = "logos/" + filename;
         try {
-            Path directory = Path.of("uploads").toAbsolutePath();
-            Files.createDirectories(directory);
-            Files.copy(file.getInputStream(), directory.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
-            Business business = getBusiness();
-            business.setLogo("/uploads/" + filename);
+            byte[] fileBytes = file.getBytes();
+            String storedUrl = storageService.store(storageKey, fileBytes, file.getContentType());
+            business.setLogo(storedUrl);
             Business saved = businessRepository.save(business);
-            auditLogService.logAction("UPDATE_LOGO", "BUSINESS", saved.getId(), "Business logo updated");
+            auditLogService.logAction("UPDATE_LOGO", "BUSINESS", saved.getId(), "Business logo updated in persistent storage");
             return saved;
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save logo");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not process logo file");
         }
     }
 
     @Transactional
     public Business saveSignature(MultipartFile file) {
         String ext = validateAndExtractExtension(file);
-        String filename = "business-" + getBusiness().getId() + "-signature-" + System.currentTimeMillis() + ext;
+        Business business = getBusiness();
+        String filename = "business-" + business.getId() + "-signature-" + System.currentTimeMillis() + ext;
+        String storageKey = "signatures/" + filename;
         try {
-            Path directory = Path.of("uploads").toAbsolutePath();
-            Files.createDirectories(directory);
-            Files.copy(file.getInputStream(), directory.resolve(filename), StandardCopyOption.REPLACE_EXISTING);
-            Business business = getBusiness();
-            business.setSignature("/uploads/" + filename);
+            byte[] fileBytes = file.getBytes();
+            String storedUrl = storageService.store(storageKey, fileBytes, file.getContentType());
+            business.setSignature(storedUrl);
             Business saved = businessRepository.save(business);
-            auditLogService.logAction("UPDATE_SIGNATURE", "BUSINESS", saved.getId(), "Business signature updated");
+            auditLogService.logAction("UPDATE_SIGNATURE", "BUSINESS", saved.getId(), "Business signature/stamp updated in persistent storage");
             return saved;
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not save signature/stamp");
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Could not process signature/stamp file");
         }
     }
 }

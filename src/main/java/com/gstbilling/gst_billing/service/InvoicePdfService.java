@@ -11,6 +11,10 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
 import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.gstbilling.gst_billing.storage.StorageException;
+import com.gstbilling.gst_billing.storage.StorageService;
 import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayOutputStream;
@@ -23,12 +27,14 @@ import java.nio.file.Path;
 @Service
 public class InvoicePdfService {
 
+    private static final Logger log = LoggerFactory.getLogger(InvoicePdfService.class);
+
     private final InvoiceService invoiceService;
-    private final com.gstbilling.gst_billing.storage.StorageService storageService;
+    private final StorageService storageService;
 
     public InvoicePdfService(
             InvoiceService invoiceService,
-            com.gstbilling.gst_billing.storage.StorageService storageService
+            StorageService storageService
     ) {
         this.invoiceService = invoiceService;
         this.storageService = storageService;
@@ -79,14 +85,14 @@ public class InvoicePdfService {
                 Business business = invoice.getBusiness();
 
                 // Logo if present
-                Path logoPath = (business != null && business.getLogo() != null)
-                        ? Path.of("uploads", Path.of(business.getLogo()).getFileName().toString())
-                        : null;
-                if (logoPath != null && Files.exists(logoPath)) {
+                byte[] logoBytes = (business != null) ? loadAssetBytes(business.getLogo()) : null;
+                if (logoBytes != null && logoBytes.length > 0) {
                     try {
-                        PDImageXObject logo = PDImageXObject.createFromFileByContent(logoPath.toFile(), document);
+                        PDImageXObject logo = PDImageXObject.createFromByteArray(document, logoBytes, "logo");
                         content.drawImage(logo, 470, y - 35, 80, 40);
-                    } catch (Exception ignored) {}
+                    } catch (Exception e) {
+                        log.debug("Could not render logo in invoice PDF: {}", e.getMessage());
+                    }
                 }
 
                 y -= 30;
@@ -181,9 +187,40 @@ public class InvoicePdfService {
                 line(content, left, y, right, y);
                 y -= 15;
 
-                // Summary / Totals
+                // Summary / Totals & HSN/SAC Tax Breakdown
                 float totalX1 = 360;
                 float totalX2 = 490;
+
+                // Left side: Statutory HSN/SAC Summary
+                float hsnX = left + 5;
+                float hsnY = y;
+                write(content, "HSN/SAC TAX SUMMARY:", 8, true, hsnX, hsnY);
+                hsnY -= 11;
+                write(content, "HSN/SAC", 7, true, hsnX, hsnY);
+                write(content, "Taxable", 7, true, hsnX + 55, hsnY);
+                write(content, "Rate", 7, true, hsnX + 115, hsnY);
+                write(content, "Tax Amt", 7, true, hsnX + 155, hsnY);
+                hsnY -= 10;
+
+                java.util.Map<String, java.math.BigDecimal[]> hsnMap = new java.util.LinkedHashMap<>();
+                if (invoice.getItems() != null) {
+                    for (InvoiceItem item : invoice.getItems()) {
+                        String code = (item.getHsnCode() != null && !item.getHsnCode().isBlank()) ? item.getHsnCode() : "N/A";
+                        java.math.BigDecimal taxVal = item.getTaxableAmount() != null ? item.getTaxableAmount() : java.math.BigDecimal.ZERO;
+                        java.math.BigDecimal taxAmt = item.getTaxAmount() != null ? item.getTaxAmount() : java.math.BigDecimal.ZERO;
+                        java.math.BigDecimal rate = item.getGstRate() != null ? item.getGstRate() : java.math.BigDecimal.ZERO;
+                        java.math.BigDecimal[] acc = hsnMap.computeIfAbsent(code, k -> new java.math.BigDecimal[]{java.math.BigDecimal.ZERO, java.math.BigDecimal.ZERO, rate});
+                        acc[0] = acc[0].add(taxVal);
+                        acc[1] = acc[1].add(taxAmt);
+                    }
+                }
+                for (java.util.Map.Entry<String, java.math.BigDecimal[]> entry : hsnMap.entrySet()) {
+                    write(content, entry.getKey(), 7, false, hsnX, hsnY);
+                    write(content, formatNum(entry.getValue()[0]), 7, false, hsnX + 55, hsnY);
+                    write(content, entry.getValue()[2] + "%", 7, false, hsnX + 115, hsnY);
+                    write(content, formatNum(entry.getValue()[1]), 7, false, hsnX + 155, hsnY);
+                    hsnY -= 10;
+                }
 
                 write(content, "Taxable Amount:", 9, false, totalX1, y);
                 write(content, formatCurrency(invoice.getTaxableAmount()), 9, false, totalX2, y);
@@ -263,15 +300,15 @@ public class InvoicePdfService {
                 write(content, "For " + (business != null ? business.getName() : "Business"), 9, true, 400, sigY);
                 sigY -= 35;
                 // Stamp/Signature image if available
-                Path sigPath = (business != null && business.getSignature() != null)
-                        ? Path.of("uploads", Path.of(business.getSignature()).getFileName().toString())
-                        : null;
-                if (sigPath != null && Files.exists(sigPath)) {
+                byte[] sigBytes = (business != null) ? loadAssetBytes(business.getSignature()) : null;
+                if (sigBytes != null && sigBytes.length > 0) {
                     try {
-                        PDImageXObject sigImg = PDImageXObject.createFromFileByContent(sigPath.toFile(), document);
+                        PDImageXObject sigImg = PDImageXObject.createFromByteArray(document, sigBytes, "sig");
                         content.drawImage(sigImg, 420, sigY - 10, 70, 30);
                         sigY -= 15;
-                    } catch (Exception ignored) {}
+                    } catch (Exception e) {
+                        log.debug("Could not render signature in invoice PDF: {}", e.getMessage());
+                    }
                 }
                 sigY -= 10;
                 write(content, "Authorized Signatory", 8, false, 410, sigY);
@@ -285,12 +322,50 @@ public class InvoicePdfService {
             if (!"DRAFT".equalsIgnoreCase(invoice.getStatus())) {
                 try {
                     storageService.store(cacheKey, pdfBytes, "application/pdf");
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    log.error("Failed to store finalized invoice PDF (key={}): {}", cacheKey, e.getMessage());
+                    throw new StorageException("Failed to persist invoice PDF to storage: " + cacheKey, e);
+                }
             }
             return pdfBytes;
         } catch (IOException e) {
             throw new RuntimeException("Failed to generate invoice PDF", e);
         }
+    }
+
+    private byte[] loadAssetBytes(String assetPathOrUrl) {
+        if (assetPathOrUrl == null || assetPathOrUrl.isBlank()) {
+            return null;
+        }
+        String clean = assetPathOrUrl.trim().replace("\\", "/");
+        while (clean.startsWith("/")) clean = clean.substring(1);
+
+        try {
+            if (storageService.exists(clean)) {
+                byte[] bytes = storageService.retrieve(clean);
+                if (bytes != null && bytes.length > 0) return bytes;
+            }
+        } catch (Exception ignored) {}
+
+        String filename = clean.contains("/") ? clean.substring(clean.lastIndexOf('/') + 1) : clean;
+        for (String prefix : new String[]{"logos/", "signatures/", "uploads/"}) {
+            try {
+                String candidate = prefix + filename;
+                if (storageService.exists(candidate)) {
+                    byte[] bytes = storageService.retrieve(candidate);
+                    if (bytes != null && bytes.length > 0) return bytes;
+                }
+            } catch (Exception ignored) {}
+        }
+
+        try {
+            Path localPath = Path.of("uploads", filename);
+            if (Files.exists(localPath) && Files.isRegularFile(localPath)) {
+                return Files.readAllBytes(localPath);
+            }
+        } catch (Exception ignored) {}
+
+        return null;
     }
 
     private void write(PDPageContentStream content, String text, int size, boolean bold, float x, float y) throws IOException {
