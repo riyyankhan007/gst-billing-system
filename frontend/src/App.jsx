@@ -22,13 +22,14 @@ import Icon from "./components/Icon";
 import { SkeletonTable } from "./components/ui/Skeleton";
 import EmptyState from "./components/ui/EmptyState";
 import ErrorState from "./components/ui/ErrorState";
+import ErrorBoundary from "./components/ui/ErrorBoundary";
 import { useToast } from "./context/ToastContext";
 import "./styles/app.css";
 
 // Hash-based route parser for native browser history (Back / Forward buttons)
 function parseRouteFromHash(hashString) {
     const raw = (hashString || (typeof window !== "undefined" ? window.location.hash : "") || "").replace(/^#\/?/, "");
-    if (!raw) return { page: "dashboard", invoiceId: null, customerId: null };
+    if (!raw) return { page: "dashboard", invoiceId: null, customerId: null, inventoryTab: "stock" };
 
     const [pathPart, queryPart] = raw.split("?");
     const parts = pathPart.split("/").filter(Boolean);
@@ -39,16 +40,30 @@ function parseRouteFromHash(hashString) {
     const qId = queryParams.get("id");
 
     if (primary === "details" || primary === "invoice" || (primary === "invoices" && subId)) {
-        return { page: "details", invoiceId: subId || qId, customerId: null };
+        return { page: "details", invoiceId: subId || qId, customerId: null, inventoryTab: "stock" };
     }
     if (primary === "customer-details" || primary === "customer" || (primary === "customers" && subId)) {
-        return { page: "customer-details", customerId: subId || qId, invoiceId: null };
+        return { page: "customer-details", customerId: subId || qId, invoiceId: null, inventoryTab: "stock" };
+    }
+
+    if (primary === "inventory" || primary === "stock-audit" || primary === "stock-audit-trail" || primary === "audit-trail") {
+        const tabParam = queryParams.get("tab") || subId;
+        const normalizedTab = (tabParam === "audit" || tabParam === "movements" || tabParam === "trail")
+            ? "movements"
+            : (tabParam === "warehouses" || tabParam === "facilities" ? "warehouses" : (tabParam === "stock" ? "stock" : null));
+        return {
+            page: "inventory",
+            inventoryTab: normalizedTab || (primary === "stock-audit" || primary === "stock-audit-trail" ? "movements" : "stock"),
+            invoiceId: null,
+            customerId: null
+        };
     }
 
     return {
         page: primary,
         invoiceId: qId || null,
-        customerId: qId || null
+        customerId: qId || null,
+        inventoryTab: "stock"
     };
 }
 
@@ -61,6 +76,7 @@ function App() {
     const initialRoute = parseRouteFromHash(typeof window !== "undefined" ? window.location.hash : "");
     const [profile, setProfile] = useState(null);
     const [page, setPage] = useState(initialRoute.page);
+    const [inventoryTab, setInventoryTab] = useState(initialRoute.inventoryTab || "stock");
     const [invoices, setInvoices] = useState([]);
     const [selectedInvoiceId, setSelectedInvoiceId] = useState(initialRoute.invoiceId);
     const [selectedCustomerId, setSelectedCustomerId] = useState(initialRoute.customerId);
@@ -185,6 +201,7 @@ function App() {
             setPage(route.page);
             if (route.invoiceId !== null) setSelectedInvoiceId(route.invoiceId);
             if (route.customerId !== null) setSelectedCustomerId(route.customerId);
+            if (route.inventoryTab) setInventoryTab(route.inventoryTab);
             window.scrollTo({ top: 0, behavior: "smooth" });
         };
 
@@ -870,7 +887,15 @@ function App() {
                     )}
 
                     {/* Inventory & Stock Movement */}
-                    {page === "inventory" && <Inventory />}
+                    {page === "inventory" && (
+                        <ErrorBoundary title="Inventory Error">
+                            <Inventory
+                                key={`inventory-${businessVersion}`}
+                                defaultTab={inventoryTab}
+                                onTabChange={(tab) => setInventoryTab(tab)}
+                            />
+                        </ErrorBoundary>
+                    )}
 
                     {/* Reports & Compliance */}
                     {page === "reports" && <Reports />}

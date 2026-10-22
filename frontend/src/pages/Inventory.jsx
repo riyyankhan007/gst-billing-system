@@ -12,11 +12,12 @@ import {
 } from "../services/api";
 import { Skeleton, SkeletonKpi, SkeletonTable } from "../components/ui/Skeleton";
 import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
 import { useToast } from "../context/ToastContext";
 
-export default function Inventory() {
+export default function Inventory({ defaultTab = "stock", onTabChange }) {
     const toast = useToast();
-    const [activeTab, setActiveTab] = useState("stock"); // "stock" | "movements" | "warehouses"
+    const [activeTab, setActiveTab] = useState(defaultTab); // "stock" | "movements" | "warehouses"
     const [warehouses, setWarehouses] = useState([]);
     const [selectedWarehouseId, setSelectedWarehouseId] = useState("");
     const [warehouseStocks, setWarehouseStocks] = useState([]);
@@ -24,8 +25,12 @@ export default function Inventory() {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [stockLoading, setStockLoading] = useState(false);
+    const [movementsLoading, setMovementsLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [movementsError, setMovementsError] = useState("");
     const [search, setSearch] = useState("");
     const [movementFilter, setMovementFilter] = useState("ALL");
+    const [movementWarehouseFilter, setMovementWarehouseFilter] = useState("ALL");
 
     // Adjust Stock Modal State
     const [showAdjustModal, setShowAdjustModal] = useState(false);
@@ -69,11 +74,26 @@ export default function Inventory() {
     const [whError, setWhError] = useState("");
 
     useEffect(() => {
+        if (defaultTab && defaultTab !== activeTab) {
+            setActiveTab(defaultTab);
+        }
+    }, [defaultTab]);
+
+    const switchTab = (tab) => {
+        setActiveTab(tab);
+        if (onTabChange) {
+            onTabChange(tab);
+        }
+    };
+
+    useEffect(() => {
         loadInitialData();
     }, []);
 
     useEffect(() => {
         const handleBizSwitch = () => {
+            setError("");
+            setMovementsError("");
             loadInitialData();
         };
         window.addEventListener("business-switched", handleBizSwitch);
@@ -86,21 +106,42 @@ export default function Inventory() {
         }
     }, [selectedWarehouseId]);
 
+    async function loadMovements() {
+        try {
+            setMovementsLoading(true);
+            setMovementsError("");
+            const movs = await getInventoryMovements();
+            setMovements(Array.isArray(movs) ? movs : []);
+        } catch (err) {
+            console.error("Failed to load inventory movements:", err);
+            setMovementsError(err.message || "Failed to load stock audit trail records");
+            setMovements([]);
+        } finally {
+            setMovementsLoading(false);
+        }
+    }
+
     async function loadInitialData() {
         try {
             setLoading(true);
             setError("");
-            const [whList, movs, prods] = await Promise.all([
-                getWarehouses().catch(() => []),
-                getInventoryMovements().catch(() => []),
-                getProducts().catch(() => [])
+
+            const [whResult, prodResult] = await Promise.allSettled([
+                getWarehouses(),
+                getProducts()
             ]);
 
-            setWarehouses(whList || []);
-            setMovements(movs || []);
-            setProducts((prods || []).filter(p => p.productType?.toUpperCase() !== "SERVICE"));
+            if (whResult.status === "rejected" && prodResult.status === "rejected") {
+                throw new Error(whResult.reason?.message || "Failed to connect to inventory services");
+            }
 
-            if (whList && whList.length > 0) {
+            const whList = whResult.status === "fulfilled" && Array.isArray(whResult.value) ? whResult.value : [];
+            const prods = prodResult.status === "fulfilled" && Array.isArray(prodResult.value) ? prodResult.value : [];
+
+            setWarehouses(whList);
+            setProducts(prods.filter(p => p.productType?.toUpperCase() !== "SERVICE"));
+
+            if (whList.length > 0) {
                 const defaultWh = whList.find(w => w.isDefault) || whList[0];
                 setSelectedWarehouseId(String(defaultWh.id));
             }
@@ -109,6 +150,9 @@ export default function Inventory() {
         } finally {
             setLoading(false);
         }
+
+        // Independently load movements so an audit trail failure never crashes the inventory page
+        loadMovements();
     }
 
     async function loadStockForWarehouse(whId) {
@@ -116,8 +160,9 @@ export default function Inventory() {
         try {
             setStockLoading(true);
             const stocks = await getWarehouseStock(whId);
-            setWarehouseStocks(stocks || []);
-        } catch {
+            setWarehouseStocks(Array.isArray(stocks) ? stocks : []);
+        } catch (err) {
+            console.error("Failed to load warehouse stock:", err);
             setWarehouseStocks([]);
         } finally {
             setStockLoading(false);
@@ -156,7 +201,7 @@ export default function Inventory() {
             toast.success("Stock quantity adjusted successfully!");
             await Promise.all([
                 loadStockForWarehouse(selectedWarehouseId),
-                getInventoryMovements().then(setMovements)
+                loadMovements()
             ]);
         } catch (err) {
             setAdjustError(err.message || "Failed to adjust stock");
@@ -202,7 +247,7 @@ export default function Inventory() {
             toast.success("Stock transferred successfully between warehouses!");
             await Promise.all([
                 loadStockForWarehouse(selectedWarehouseId),
-                getInventoryMovements().then(setMovements)
+                loadMovements()
             ]);
         } catch (err) {
             setTransferError(err.message || "Failed to transfer stock");
@@ -242,7 +287,7 @@ export default function Inventory() {
             toast.success("Opening stock recorded successfully!");
             await Promise.all([
                 loadStockForWarehouse(selectedWarehouseId),
-                getInventoryMovements().then(setMovements)
+                loadMovements()
             ]);
         } catch (err) {
             setOpeningError(err.message || "Failed to record opening stock");
@@ -286,7 +331,7 @@ export default function Inventory() {
             setShowWarehouseModal(false);
             toast.success(`Warehouse "${created.name}" (${created.code}) created successfully!`);
             const updatedList = await getWarehouses();
-            setWarehouses(updatedList || []);
+            setWarehouses(Array.isArray(updatedList) ? updatedList : []);
             if (created.id) {
                 setSelectedWarehouseId(String(created.id));
             }
@@ -302,13 +347,33 @@ export default function Inventory() {
     const filteredMovements = movements.filter(m => {
         const q = search.toLowerCase();
         const prodName = m.product?.name?.toLowerCase() || "";
+        const prodSku = m.product?.sku?.toLowerCase() || "";
         const refNum = m.referenceNumber?.toLowerCase() || "";
         const notes = m.notes?.toLowerCase() || "";
         const whName = m.warehouse?.name?.toLowerCase() || "";
+        const whCode = m.warehouse?.code?.toLowerCase() || "";
         const targetWh = m.targetWarehouse?.name?.toLowerCase() || "";
-        const matchesSearch = !q || prodName.includes(q) || refNum.includes(q) || notes.includes(q) || whName.includes(q) || targetWh.includes(q);
+        const targetWhCode = m.targetWarehouse?.code?.toLowerCase() || "";
+
+        const matchesSearch = !q ||
+            prodName.includes(q) ||
+            prodSku.includes(q) ||
+            refNum.includes(q) ||
+            notes.includes(q) ||
+            whName.includes(q) ||
+            whCode.includes(q) ||
+            targetWh.includes(q) ||
+            targetWhCode.includes(q);
+
         if (!matchesSearch) return false;
         if (movementFilter !== "ALL" && m.movementType !== movementFilter) return false;
+
+        if (movementWarehouseFilter !== "ALL") {
+            const matchesWh = String(m.warehouse?.id) === String(movementWarehouseFilter) ||
+                              String(m.targetWarehouse?.id) === String(movementWarehouseFilter);
+            if (!matchesWh) return false;
+        }
+
         return true;
     });
 
@@ -316,14 +381,14 @@ export default function Inventory() {
         const q = search.toLowerCase();
         const name = ws.product?.name?.toLowerCase() || "";
         const sku = ws.product?.sku?.toLowerCase() || "";
-        const hsn = ws.product?.hsnSac?.code?.toLowerCase() || "";
+        const hsn = ws.product?.hsnSac?.code?.toLowerCase() || ws.product?.hsnCode?.toLowerCase() || "";
         return !q || name.includes(q) || sku.includes(q) || hsn.includes(q);
     });
 
     // Summary stats for selected warehouse
     const totalOnHand = warehouseStocks.reduce((sum, ws) => sum + Number(ws.quantityOnHand || 0), 0);
     const totalReserved = warehouseStocks.reduce((sum, ws) => sum + Number(ws.quantityReserved || 0), 0);
-    const totalAvailable = warehouseStocks.reduce((sum, ws) => sum + Number(ws.availableQuantity || 0), 0);
+    const totalAvailable = warehouseStocks.reduce((sum, ws) => sum + Number(ws.availableQuantity || ws.quantityOnHand || 0), 0);
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -355,9 +420,12 @@ export default function Inventory() {
             </div>
 
             {error && (
-                <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.12)", color: "var(--danger)", borderRadius: "var(--radius-sm)", border: "1px solid #fecaca", fontWeight: 500 }}>
-                    {error}
-                </div>
+                <ErrorState
+                    title="Unable to load inventory data"
+                    message={error}
+                    onRetry={loadInitialData}
+                    retryLabel="Retry Loading Inventory"
+                />
             )}
 
             {/* Warehouse Selector & Metric Cards */}
@@ -444,7 +512,7 @@ export default function Inventory() {
                 <button
                     type="button"
                     className={`action-btn-sm ${activeTab === "stock" ? "primary-button" : ""}`}
-                    onClick={() => setActiveTab("stock")}
+                    onClick={() => switchTab("stock")}
                 >
                     <Icon type="inventory" size={14} />
                     <span>Warehouse Stock ({warehouseStocks.length})</span>
@@ -452,15 +520,15 @@ export default function Inventory() {
                 <button
                     type="button"
                     className={`action-btn-sm ${activeTab === "movements" ? "primary-button" : ""}`}
-                    onClick={() => setActiveTab("movements")}
+                    onClick={() => switchTab("movements")}
                 >
                     <Icon type="fileText" size={14} />
-                    <span>Stock Audit Movements ({movements.length})</span>
+                    <span>Stock Audit Trail ({movements.length})</span>
                 </button>
                 <button
                     type="button"
                     className={`action-btn-sm ${activeTab === "warehouses" ? "primary-button" : ""}`}
-                    onClick={() => setActiveTab("warehouses")}
+                    onClick={() => switchTab("warehouses")}
                 >
                     <Icon type="bank" size={14} />
                     <span>All Facilities ({warehouses.length})</span>
@@ -535,7 +603,7 @@ export default function Inventory() {
                                         const p = ws.product;
                                         const onHand = Number(ws.quantityOnHand || 0);
                                         const reserved = Number(ws.quantityReserved || 0);
-                                        const available = Number(ws.availableQuantity || 0);
+                                        const available = Number(ws.availableQuantity || ws.quantityOnHand || 0);
                                         const isLow = available <= Number(p?.lowStockThreshold || 5);
 
                                         return (
@@ -593,7 +661,7 @@ export default function Inventory() {
                 <div className="table-card">
                     <div className="table-header-card">
                         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", flex: 1, alignItems: "center" }}>
-                            <div className="search-input-wrapper" style={{ maxWidth: "420px", flex: 1 }}>
+                            <div className="search-input-wrapper" style={{ maxWidth: "360px", flex: 1 }}>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <circle cx="11" cy="11" r="8" />
                                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -611,42 +679,81 @@ export default function Inventory() {
                                     </button>
                                 )}
                             </div>
+
+                            {/* Movement Type Filter */}
                             <select
                                 className="form-control"
                                 value={movementFilter}
                                 onChange={e => setMovementFilter(e.target.value)}
-                                style={{ width: "210px", height: "38px" }}
+                                style={{ width: "190px", height: "38px" }}
                             >
-                                <option value="ALL">All Movements</option>
+                                <option value="ALL">All Movement Types</option>
                                 <option value="INVOICE">Invoices (Outward)</option>
+                                <option value="INVOICE_CANCELLED">Invoice Reversals</option>
                                 <option value="PURCHASE">Purchases (Inward)</option>
+                                <option value="PURCHASE_CANCELLED">Purchase Reversals</option>
                                 <option value="TRANSFER_OUT">Transfer (Outward)</option>
                                 <option value="TRANSFER_IN">Transfer (Inward)</option>
                                 <option value="OPENING_STOCK">Opening Stock</option>
                                 <option value="MANUAL_ADJUSTMENT">Manual Adjustments</option>
                             </select>
+
+                            {/* Warehouse Facility Filter */}
+                            <select
+                                className="form-control"
+                                value={movementWarehouseFilter}
+                                onChange={e => setMovementWarehouseFilter(e.target.value)}
+                                style={{ width: "190px", height: "38px" }}
+                            >
+                                <option value="ALL">All Facilities</option>
+                                {warehouses.map(w => (
+                                    <option key={w.id} value={w.id}>
+                                        {w.name} ({w.code})
+                                    </option>
+                                ))}
+                            </select>
+
+                            <button
+                                type="button"
+                                className="action-btn-sm"
+                                onClick={loadMovements}
+                                title="Refresh Audit Trail"
+                                disabled={movementsLoading}
+                            >
+                                <Icon type="refresh" size={13} />
+                                <span>Refresh</span>
+                            </button>
                         </div>
                         <span style={{ fontSize: "13px", color: "var(--text-muted)", fontWeight: 500 }}>
                             Showing {filteredMovements.length} audit records
                         </span>
                     </div>
 
-                    {loading ? (
+                    {movementsLoading ? (
                         <div style={{ padding: "16px" }}>
                             <SkeletonTable rows={6} columns={9} />
+                        </div>
+                    ) : movementsError ? (
+                        <div style={{ padding: "16px" }}>
+                            <ErrorState
+                                title="Failed to load stock audit trail"
+                                message={movementsError}
+                                onRetry={loadMovements}
+                                retryLabel="Retry Audit Log"
+                            />
                         </div>
                     ) : filteredMovements.length === 0 ? (
                         <EmptyState
                             icon="fileText"
-                            title={movements.length === 0 ? "No stock movements recorded" : "No matching movements found"}
+                            title={movements.length === 0 ? "No stock movements recorded yet" : "No matching movements found"}
                             message={
                                 movements.length === 0
-                                    ? "Track automatic additions from purchases, invoice deductions, or warehouse transfers."
-                                    : "No audit movements match current filter or search criteria."
+                                    ? "All stock adjustments, invoice deductions, inward purchases, and transfers will be tracked here with immutable timestamps and audit details."
+                                    : "No audit records match the current filter or search criteria."
                             }
                             action={
-                                search || movementFilter !== "ALL"
-                                    ? { label: "Clear Filters", onClick: () => { setSearch(""); setMovementFilter("ALL"); } }
+                                search || movementFilter !== "ALL" || movementWarehouseFilter !== "ALL"
+                                    ? { label: "Clear Filters", onClick: () => { setSearch(""); setMovementFilter("ALL"); setMovementWarehouseFilter("ALL"); } }
                                     : null
                             }
                         />
@@ -668,15 +775,23 @@ export default function Inventory() {
                                 </thead>
                                 <tbody>
                                     {filteredMovements.map(m => {
-                                        const isPositive = Number(m.quantity) > 0;
+                                        const qtyNum = Number(m.quantity || 0);
+                                        const isPositive = qtyNum > 0;
                                         return (
                                             <tr key={m.id}>
                                                 <td style={{ fontSize: "12.5px", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>
                                                     {m.createdAt ? new Date(m.createdAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "medium" }) : "—"}
                                                 </td>
-                                                <td><strong>{m.product ? m.product.name : "Product"}</strong></td>
                                                 <td>
-                                                    <span style={{ fontWeight: 600 }}>{m.warehouse?.name || "Main"}</span>
+                                                    <strong>{m.product?.name || "Product"}</strong>
+                                                    {m.product?.sku && (
+                                                        <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                                                            SKU: {m.product.sku}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    <span style={{ fontWeight: 600 }}>{m.warehouse?.name || "Main Warehouse"}</span>
                                                     {m.warehouse?.code && (
                                                         <span style={{ fontSize: "11px", color: "var(--text-muted)", marginLeft: "4px" }}>({m.warehouse.code})</span>
                                                     )}
@@ -697,14 +812,14 @@ export default function Inventory() {
                                                     {isPositive ? `+${m.quantity}` : m.quantity}
                                                 </td>
                                                 <td className="table-num" style={{ textAlign: "right" }}>
-                                                    {m.stockBefore !== null ? m.stockBefore : "—"}
+                                                    {m.stockBefore !== null && m.stockBefore !== undefined ? m.stockBefore : "—"}
                                                 </td>
                                                 <td className="table-num" style={{ textAlign: "right", fontWeight: "700" }}>
-                                                    {m.stockAfter !== null ? m.stockAfter : "—"}
+                                                    {m.stockAfter !== null && m.stockAfter !== undefined ? m.stockAfter : "—"}
                                                 </td>
                                                 <td style={{ paddingLeft: "16px", fontSize: "12.5px", color: "var(--text-secondary)" }}>
                                                     {m.targetWarehouse ? (
-                                                        <span>To: <strong>{m.targetWarehouse.name} ({m.targetWarehouse.code})</strong></span>
+                                                        <span>Route: <strong>{m.warehouse?.name || "Source"} &rarr; {m.targetWarehouse.name} ({m.targetWarehouse.code})</strong></span>
                                                     ) : (
                                                         m.notes || "—"
                                                     )}
@@ -752,8 +867,8 @@ export default function Inventory() {
                                         <td>{w.address ? `${w.address}, ` : ""}{w.city || "—"}</td>
                                         <td>{w.state || "—"}</td>
                                         <td>
-                                            <span className="badge" style={{ background: w.isActive ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", color: w.isActive ? "#065f46" : "#ef4444" }}>
-                                                {w.isActive ? "Active" : "Inactive"}
+                                            <span className="badge" style={{ background: w.isActive !== false ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)", color: w.isActive !== false ? "#065f46" : "#ef4444" }}>
+                                                {w.isActive !== false ? "Active" : "Inactive"}
                                             </span>
                                         </td>
                                         <td>

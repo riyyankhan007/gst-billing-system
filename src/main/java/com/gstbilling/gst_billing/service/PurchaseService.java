@@ -21,22 +21,58 @@ public class PurchaseService {
     private final ProductRepository productRepository;
     private final StockMovementRepository stockMovementRepository;
     private final CurrentUserService currentUserService;
+    private final WarehouseService warehouseService;
+    private final WarehouseStockRepository warehouseStockRepository;
 
     public PurchaseService(PurchaseRepository purchaseRepository,
                            SupplierRepository supplierRepository,
                            ProductRepository productRepository,
                            StockMovementRepository stockMovementRepository,
                            CurrentUserService currentUserService) {
+        this(purchaseRepository, supplierRepository, productRepository, stockMovementRepository, currentUserService, null, null);
+    }
+
+    public PurchaseService(PurchaseRepository purchaseRepository,
+                           SupplierRepository supplierRepository,
+                           ProductRepository productRepository,
+                           StockMovementRepository stockMovementRepository,
+                           CurrentUserService currentUserService,
+                           WarehouseService warehouseService,
+                           WarehouseStockRepository warehouseStockRepository) {
         this.purchaseRepository = purchaseRepository;
         this.supplierRepository = supplierRepository;
         this.productRepository = productRepository;
         this.stockMovementRepository = stockMovementRepository;
         this.currentUserService = currentUserService;
+        this.warehouseService = warehouseService;
+        this.warehouseStockRepository = warehouseStockRepository;
+    }
+
+    private Business resolveBusiness() {
+        Business business = currentUserService.getCurrentBusiness();
+        if (business == null && currentUserService.getCurrentUser() != null) {
+            business = currentUserService.getCurrentUser().getBusiness();
+        }
+        if (business == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No active business context");
+        }
+        return business;
+    }
+
+    private Long resolveBusinessId() {
+        Long businessId = currentUserService.getCurrentTenantId();
+        if (businessId == null && currentUserService.getCurrentUser() != null && currentUserService.getCurrentUser().getBusiness() != null) {
+            businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        }
+        if (businessId == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No active business context");
+        }
+        return businessId;
     }
 
     @Transactional
     public Purchase createPurchase(Purchase purchase) {
-        Business business = currentUserService.getCurrentUser().getBusiness();
+        Business business = resolveBusiness();
         purchase.setBusiness(business);
 
         Supplier supplier = supplierRepository.findByIdAndBusiness_Id(purchase.getSupplierId(), business.getId())
@@ -127,7 +163,9 @@ public class PurchaseService {
 
         Purchase saved = purchaseRepository.save(purchase);
 
-        // Increase inventory stock for products
+        // Increase inventory stock for products in default warehouse
+        Warehouse defaultWh = warehouseService != null ? warehouseService.getOrCreateDefaultWarehouse(business) : null;
+
         for (PurchaseItem item : saved.getItems()) {
             if (item.getProductId() != null) {
                 Product prod = productRepository.findByIdAndBusinessId(item.getProductId(), business.getId()).orElse(null);
@@ -138,17 +176,31 @@ public class PurchaseService {
                     prod.setStockQuantity(after);
                     productRepository.save(prod);
 
-                    StockMovement movement = new StockMovement(
-                            business,
-                            prod,
-                            "PURCHASE",
-                            qty,
-                            before,
-                            after,
-                            saved.getSupplierInvoiceNumber(),
-                            "Stock added from supplier purchase #" + saved.getSupplierInvoiceNumber()
-                    );
-                    stockMovementRepository.save(movement);
+                    if (defaultWh != null && warehouseStockRepository != null) {
+                        WarehouseStock whStock = warehouseStockRepository.findForUpdateByWarehouseIdAndProductId(defaultWh.getId(), prod.getId())
+                                .orElseGet(() -> {
+                                    WarehouseStock ws = new WarehouseStock(business, defaultWh, prod, before);
+                                    return warehouseStockRepository.saveAndFlush(ws);
+                                });
+                        whStock.setQuantityOnHand(whStock.getQuantityOnHand().add(qty));
+                        whStock.setUpdatedAt(LocalDateTime.now());
+                        warehouseStockRepository.save(whStock);
+                    }
+
+                    if (stockMovementRepository != null) {
+                        StockMovement movement = new StockMovement(
+                                business,
+                                defaultWh,
+                                prod,
+                                "PURCHASE",
+                                qty,
+                                before,
+                                after,
+                                saved.getSupplierInvoiceNumber(),
+                                "Stock added from supplier purchase #" + saved.getSupplierInvoiceNumber()
+                        );
+                        stockMovementRepository.save(movement);
+                    }
                 }
             }
         }
@@ -158,13 +210,13 @@ public class PurchaseService {
 
     @Transactional(readOnly = true)
     public List<Purchase> getAllPurchases() {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = resolveBusinessId();
         return purchaseRepository.findByBusiness_IdOrderByPurchaseDateDescIdDesc(businessId);
     }
 
     @Transactional(readOnly = true)
     public Purchase getPurchaseById(Long id) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = resolveBusinessId();
         return purchaseRepository.findByIdAndBusiness_Id(id, businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Purchase not found with ID: " + id));
     }
@@ -193,6 +245,7 @@ public class PurchaseService {
     public void deletePurchase(Long id) {
         Purchase purchase = getPurchaseById(id);
         Business business = purchase.getBusiness();
+        Warehouse defaultWh = warehouseService != null ? warehouseService.getOrCreateDefaultWarehouse(business) : null;
 
         // Reverse stock increase
         for (PurchaseItem item : purchase.getItems()) {
@@ -205,17 +258,31 @@ public class PurchaseService {
                     prod.setStockQuantity(after);
                     productRepository.save(prod);
 
-                    StockMovement movement = new StockMovement(
-                            business,
-                            prod,
-                            "PURCHASE_CANCELLED",
-                            qty.negate(),
-                            before,
-                            after,
-                            purchase.getSupplierInvoiceNumber(),
-                            "Purchase deleted - stock reverted"
-                    );
-                    stockMovementRepository.save(movement);
+                    if (defaultWh != null && warehouseStockRepository != null) {
+                        WarehouseStock whStock = warehouseStockRepository.findForUpdateByWarehouseIdAndProductId(defaultWh.getId(), prod.getId())
+                                .orElseGet(() -> {
+                                    WarehouseStock ws = new WarehouseStock(business, defaultWh, prod, before);
+                                    return warehouseStockRepository.saveAndFlush(ws);
+                                });
+                        whStock.setQuantityOnHand(whStock.getQuantityOnHand().subtract(qty));
+                        whStock.setUpdatedAt(LocalDateTime.now());
+                        warehouseStockRepository.save(whStock);
+                    }
+
+                    if (stockMovementRepository != null) {
+                        StockMovement movement = new StockMovement(
+                                business,
+                                defaultWh,
+                                prod,
+                                "PURCHASE_CANCELLED",
+                                qty.negate(),
+                                before,
+                                after,
+                                purchase.getSupplierInvoiceNumber(),
+                                "Purchase deleted - stock reverted"
+                        );
+                        stockMovementRepository.save(movement);
+                    }
                 }
             }
         }

@@ -21,8 +21,8 @@ public class InventoryController {
 
     @GetMapping("/movements")
     @PreAuthorize("hasAnyRole('OWNER', 'ADMIN', 'ACCOUNTANT', 'SALES', 'VIEWER', 'SUPPORT')")
-    public List<StockMovement> getAllMovements() {
-        return inventoryService.getAllMovements();
+    public List<StockMovement> getAllMovements(@RequestParam(required = false) Long warehouseId) {
+        return inventoryService.getAllMovements(warehouseId);
     }
 
     @GetMapping("/product/{productId}/movements")

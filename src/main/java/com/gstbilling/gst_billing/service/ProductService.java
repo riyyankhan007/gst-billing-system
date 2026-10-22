@@ -1,10 +1,17 @@
 package com.gstbilling.gst_billing.service;
 
 import com.gstbilling.gst_billing.config.GstRateConfig;
+import com.gstbilling.gst_billing.entity.Business;
 import com.gstbilling.gst_billing.entity.Product;
+import com.gstbilling.gst_billing.entity.StockMovement;
+import com.gstbilling.gst_billing.entity.Warehouse;
+import com.gstbilling.gst_billing.entity.WarehouseStock;
 import com.gstbilling.gst_billing.repository.ProductRepository;
+import com.gstbilling.gst_billing.repository.StockMovementRepository;
+import com.gstbilling.gst_billing.repository.WarehouseStockRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -17,17 +24,57 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CurrentUserService currentUserService;
     private final com.gstbilling.gst_billing.repository.HsnSacCodeRepository hsnSacCodeRepository;
+    private final WarehouseService warehouseService;
+    private final WarehouseStockRepository warehouseStockRepository;
+    private final StockMovementRepository stockMovementRepository;
 
     public ProductService(
             ProductRepository productRepository,
             CurrentUserService currentUserService,
             com.gstbilling.gst_billing.repository.HsnSacCodeRepository hsnSacCodeRepository
     ) {
+        this(productRepository, currentUserService, hsnSacCodeRepository, null, null, null);
+    }
+
+    public ProductService(
+            ProductRepository productRepository,
+            CurrentUserService currentUserService,
+            com.gstbilling.gst_billing.repository.HsnSacCodeRepository hsnSacCodeRepository,
+            WarehouseService warehouseService,
+            WarehouseStockRepository warehouseStockRepository,
+            StockMovementRepository stockMovementRepository
+    ) {
         this.productRepository = productRepository;
         this.currentUserService = currentUserService;
         this.hsnSacCodeRepository = hsnSacCodeRepository;
+        this.warehouseService = warehouseService;
+        this.warehouseStockRepository = warehouseStockRepository;
+        this.stockMovementRepository = stockMovementRepository;
     }
 
+    private Business resolveBusiness() {
+        Business business = currentUserService.getCurrentBusiness();
+        if (business == null && currentUserService.getCurrentUser() != null) {
+            business = currentUserService.getCurrentUser().getBusiness();
+        }
+        if (business == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No active business context");
+        }
+        return business;
+    }
+
+    private Long resolveBusinessId() {
+        Long businessId = currentUserService.getCurrentTenantId();
+        if (businessId == null && currentUserService.getCurrentUser() != null && currentUserService.getCurrentUser().getBusiness() != null) {
+            businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        }
+        if (businessId == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No active business context");
+        }
+        return businessId;
+    }
+
+    @Transactional
     public Product createProduct(Product product) {
         if (product.getName() == null || product.getName().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Product name is required.");
@@ -56,12 +103,40 @@ public class ProductService {
             product.setTaxInclusive(false);
         }
 
-        product.setBusiness(currentUserService.getCurrentUser().getBusiness());
-        return productRepository.save(product);
+        Business business = resolveBusiness();
+        product.setBusiness(business);
+        Product saved = productRepository.save(product);
+
+        // If physical product, initialize default warehouse stock and record opening movement if stock > 0
+        if (!"SERVICE".equalsIgnoreCase(saved.getProductType()) && warehouseService != null && warehouseStockRepository != null) {
+            Warehouse defaultWh = warehouseService.getOrCreateDefaultWarehouse(business);
+            BigDecimal initQty = saved.getStockQuantity() != null ? saved.getStockQuantity() : BigDecimal.ZERO;
+
+            WarehouseStock ws = new WarehouseStock(business, defaultWh, saved, initQty);
+            warehouseStockRepository.save(ws);
+
+            if (initQty.compareTo(BigDecimal.ZERO) > 0 && stockMovementRepository != null) {
+                StockMovement movement = new StockMovement(
+                        business,
+                        defaultWh,
+                        saved,
+                        "OPENING_STOCK",
+                        initQty,
+                        BigDecimal.ZERO,
+                        initQty,
+                        "CATALOG_INIT",
+                        "Initial stock balance recorded on product creation"
+                );
+                stockMovementRepository.save(movement);
+            }
+        }
+
+        return saved;
     }
 
+    @Transactional(readOnly = true)
     public List<Product> getAllProducts(String search, String type, Boolean lowStockOnly) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = resolveBusinessId();
 
         List<Product> products;
         if (Boolean.TRUE.equals(lowStockOnly)) {
@@ -90,11 +165,15 @@ public class ProductService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
     public Product getProductById(Long id) {
-        return productRepository.findByIdAndBusinessId(id, currentUserService.getCurrentUser().getBusiness().getId())
+        Long businessId = resolveBusinessId();
+
+        return productRepository.findByIdAndBusinessId(id, businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Product not found or not accessible"));
     }
 
+    @Transactional
     public Product updateProduct(Long id, Product changes) {
         Product product = getProductById(id);
 
@@ -126,9 +205,6 @@ public class ProductService {
             product.setTaxInclusive(changes.isTaxInclusive());
         }
 
-        if (changes.getStockQuantity() != null) {
-            product.setStockQuantity(changes.getStockQuantity());
-        }
         if (changes.getLowStockThreshold() != null) {
             product.setLowStockThreshold(changes.getLowStockThreshold());
         }
@@ -145,6 +221,7 @@ public class ProductService {
         return productRepository.save(product);
     }
 
+    @Transactional
     public void deleteProduct(Long id) {
         Product product = getProductById(id);
         try {

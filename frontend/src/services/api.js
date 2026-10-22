@@ -467,8 +467,8 @@ export const deletePurchase = id =>
 // INVENTORY
 // =========================
 
-export const getInventoryMovements = () =>
-    json("/inventory/movements");
+export const getInventoryMovements = (warehouseId = null) =>
+    json(warehouseId ? `/inventory/movements?warehouseId=${warehouseId}` : "/inventory/movements");
 
 export const adjustStock = (productId, quantity, reason) =>
     json("/inventory/adjust", {
