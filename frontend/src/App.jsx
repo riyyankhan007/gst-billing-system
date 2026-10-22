@@ -16,8 +16,13 @@ import BusinessSettings from "./pages/BusinessSettings";
 import Login from "./pages/Login";
 import LandingPage from "./pages/LandingPage";
 import CustomerDetails from "./pages/CustomerDetails";
+import BusinessSwitcher from "./components/BusinessSwitcher";
 
 import Icon from "./components/Icon";
+import { SkeletonTable } from "./components/ui/Skeleton";
+import EmptyState from "./components/ui/EmptyState";
+import ErrorState from "./components/ui/ErrorState";
+import { useToast } from "./context/ToastContext";
 import "./styles/app.css";
 
 // Hash-based route parser for native browser history (Back / Forward buttons)
@@ -48,6 +53,7 @@ function parseRouteFromHash(hashString) {
 }
 
 function App() {
+    const toast = useToast();
     const [authenticated, setAuthenticated] = useState(
         Boolean(localStorage.getItem("gstToken"))
     );
@@ -59,11 +65,25 @@ function App() {
     const [selectedInvoiceId, setSelectedInvoiceId] = useState(initialRoute.invoiceId);
     const [selectedCustomerId, setSelectedCustomerId] = useState(initialRoute.customerId);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [downloadingPdfId, setDownloadingPdfId] = useState(null);
+    const [isServerSlow, setIsServerSlow] = useState(false);
     const [error, setError] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("ALL");
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [authView, setAuthView] = useState("landing"); // "landing" | "login" | "register"
+    const [businessVersion, setBusinessVersion] = useState(0);
+
+    // Listen to slow API / cold start state
+    useEffect(() => {
+        const handleSlow = (e) => {
+            setIsServerSlow(Boolean(e.detail?.isSlow));
+        };
+        window.addEventListener("api-slow-state", handleSlow);
+        return () => window.removeEventListener("api-slow-state", handleSlow);
+    }, []);
+
 
     // Close sidebar on Escape key
     useEffect(() => {
@@ -74,6 +94,17 @@ function App() {
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [sidebarOpen]);
+
+    // Prevent background scrolling when mobile navigation drawer is open
+    useEffect(() => {
+        if (sidebarOpen) {
+            const originalOverflow = document.body.style.overflow;
+            document.body.style.overflow = "hidden";
+            return () => {
+                document.body.style.overflow = originalOverflow;
+            };
+        }
     }, [sidebarOpen]);
 
     // Listen to token expiration events
@@ -120,9 +151,13 @@ function App() {
         }
     };
 
-    const loadInvoices = async () => {
+    const loadInvoices = async (preserveExisting = false) => {
         try {
-            setLoading(true);
+            if (!preserveExisting || invoices.length === 0) {
+                setLoading(true);
+            } else {
+                setRefreshing(true);
+            }
             const data = await getInvoices();
             setInvoices(data || []);
             setError("");
@@ -130,6 +165,7 @@ function App() {
             setError(err.message || "Failed to load invoices");
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
     };
 
@@ -252,7 +288,10 @@ function App() {
 
     const handleQuickPdfDownload = async (e, id, invoiceNum) => {
         e.stopPropagation();
+        if (downloadingPdfId) return;
+
         try {
+            setDownloadingPdfId(id);
             const blob = await downloadInvoicePdf(id);
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -262,14 +301,46 @@ function App() {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            toast.success(`Invoice #${invoiceNum || id} PDF downloaded.`);
         } catch (err) {
-            alert("Could not download PDF: " + err.message);
+            toast.error("Could not download PDF: " + err.message);
+        } finally {
+            setDownloadingPdfId(null);
         }
     };
+
 
     const handleQuickRemind = (e, inv) => {
         e.stopPropagation();
         navigate("details", inv.id);
+    };
+
+    const handleBusinessSwitched = async (newAuthData) => {
+        // Reset selections and search filters to avoid stale cross-tenant filter leakage
+        setSelectedInvoiceId(null);
+        setSelectedCustomerId(null);
+        setSearchQuery("");
+        setStatusFilter("ALL");
+
+        // Concurrently fetch fresh profile and invoices
+        await Promise.all([
+            loadProfile(),
+            loadInvoices()
+        ]);
+
+        // Increment version to guarantee clean React remount of all active pages
+        setBusinessVersion(prev => prev + 1);
+
+        // Safe navigation if currently viewing an entity belonging to the previous business
+        if (page === "details") {
+            navigate("invoices");
+        } else if (page === "customer-details") {
+            navigate("customers");
+        } else if (page === "create" || page === "create-invoice") {
+            navigate("dashboard");
+        }
+
+        window.dispatchEvent(new CustomEvent("business-switched", { detail: newAuthData }));
     };
 
     return (
@@ -289,18 +360,19 @@ function App() {
                     </svg>
                 </button>
 
-                <div className="mobile-brand">
-                    <span>{profile?.businessName || "GST Billing System"}</span>
+                <div className="mobile-brand" style={{ flex: 1, minWidth: 0, margin: "0 8px" }}>
+                    <BusinessSwitcher profile={profile} onBusinessSwitched={handleBusinessSwitched} />
                 </div>
 
                 <button
                     type="button"
-                    className="action-btn-sm"
+                    className="action-btn-sm mobile-topbar-action-btn"
                     onClick={() => navigate("create")}
                     title="New Invoice"
+                    aria-label="Create New Invoice"
                 >
                     <Icon type="plus" size={13} />
-                    <span>Invoice</span>
+                    <span className="mobile-topbar-action-label">Invoice</span>
                 </button>
             </header>
 
@@ -412,12 +484,28 @@ function App() {
                             </svg>
                         </button>
                         <span style={{ fontWeight: 600 }}>GST Billing & SaaS ERP</span>
-                        {profile?.businessName && (
-                            <span className="topbar-badge">{profile.businessName}</span>
-                        )}
-                        {profile?.role && (
-                            <span className="status-badge status-issued" style={{ fontSize: "11px", padding: "2px 8px" }}>
-                                Role: {profile.role}
+                        <BusinessSwitcher profile={profile} onBusinessSwitched={handleBusinessSwitched} />
+                        {isServerSlow && (
+                            <span
+                                className="refresh-indicator"
+                                style={{
+                                    backgroundColor: "#fffbeb",
+                                    color: "#92400e",
+                                    borderColor: "#fde68a",
+                                    marginLeft: "8px"
+                                }}
+                                role="status"
+                            >
+                                <span
+                                    className="inline-spinner"
+                                    style={{
+                                        width: "10px",
+                                        height: "10px",
+                                        border: "2px solid #f59e0b",
+                                        borderTopColor: "transparent"
+                                    }}
+                                />
+                                <span>Waking up server...</span>
                             </span>
                         )}
                     </div>
@@ -435,8 +523,9 @@ function App() {
                     </div>
                 </header>
 
+
                 {/* Main Content Router */}
-                <main className="main-content">
+                <main className="main-content" key={`biz-${profile?.businessId || "0"}-${businessVersion}`}>
                     {/* Dashboard */}
                     {page === "dashboard" && (
                         <Dashboard
@@ -536,40 +625,56 @@ function App() {
                                     </div>
                                 </div>
 
-                                {loading ? (
-                                    <div className="empty-state">
-                                        <p>Loading invoice records...</p>
+                                {loading && invoices.length === 0 ? (
+                                    <div className="table-card" style={{ padding: 0 }}>
+                                        <SkeletonTable
+                                            columns={8}
+                                            rows={6}
+                                            columnWidths={["16%", "20%", "10%", "10%", "14%", "14%", "8%", "8%"]}
+                                        />
                                     </div>
-                                ) : error ? (
-                                    <div className="empty-state" style={{ color: "var(--danger)" }}>
-                                        <p>{error}</p>
-                                    </div>
+                                ) : error && invoices.length === 0 ? (
+                                    <ErrorState
+                                        title="Failed to load invoices"
+                                        message={error}
+                                        onRetry={() => loadInvoices()}
+                                    />
                                 ) : invoices.length === 0 ? (
-                                    <div className="empty-state">
-                                        <div className="empty-state-icon">
-                                            <Icon type="invoice" size={26} />
-                                        </div>
-                                        <h3>No invoices generated yet</h3>
-                                        <p>Create your first GST compliant invoice to begin tracking payments and receivables.</p>
-                                        <button
-                                            type="button"
-                                            className="primary-button"
-                                            onClick={() => navigate("create")}
-                                        >
-                                            <Icon type="plus" size={13} />
-                                            <span>Create First Invoice</span>
-                                        </button>
-                                    </div>
+                                    <EmptyState
+                                        icon="invoice"
+                                        title="No invoices generated yet"
+                                        description="Create your first GST compliant invoice to begin tracking payments and receivables."
+                                        actionLabel="Create First Invoice"
+                                        onAction={() => navigate("create")}
+                                    />
                                 ) : filteredInvoices.length === 0 ? (
-                                    <div className="empty-state">
-                                        <div className="empty-state-icon">
-                                            <Icon type="search" size={26} />
-                                        </div>
-                                        <h3>No matching invoices found</h3>
-                                        <p>Try clearing your search query or choosing another status filter.</p>
-                                    </div>
+                                    <EmptyState
+                                        isFilterResult={true}
+                                        title="No matching invoices found"
+                                        description="Try clearing your search query or choosing another status filter."
+                                        onClearFilters={() => {
+                                            setSearchQuery("");
+                                            setStatusFilter("ALL");
+                                        }}
+                                    />
                                 ) : (
-                                    <div className="table-responsive">
+                                    <div className="table-responsive" style={{ position: "relative" }}>
+                                        {refreshing && (
+                                            <div style={{ position: "absolute", top: 12, right: 16, zIndex: 10 }}>
+                                                <span className="refresh-indicator">
+                                                    <span
+                                                        className="inline-spinner"
+                                                        style={{
+                                                            width: "10px",
+                                                            height: "10px",
+                                                            border: "2px solid #2563eb",
+                                                            borderTopColor: "transparent"
+                                                        }}
+                                                    />
+                                                    Updating...
+                                                </span>
+                                            </div>
+                                        )}
                                         <table className="invoice-table">
                                             <thead>
                                                 <tr>
@@ -691,11 +796,29 @@ function App() {
 
                                                                 <button
                                                                     type="button"
-                                                                    className="action-btn-sm"
+                                                                    className={`action-btn-sm ${downloadingPdfId === inv.id ? "btn-loading" : ""}`}
                                                                     title="Download PDF"
+                                                                    disabled={downloadingPdfId === inv.id}
                                                                     onClick={(e) => handleQuickPdfDownload(e, inv.id, inv.invoiceNumber)}
+                                                                    style={{ minWidth: "54px", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "4px" }}
                                                                 >
-                                                                    PDF
+                                                                    {downloadingPdfId === inv.id ? (
+                                                                        <>
+                                                                            <span
+                                                                                className="inline-spinner"
+                                                                                style={{
+                                                                                    width: "11px",
+                                                                                    height: "11px",
+                                                                                    border: "2px solid var(--text-muted)",
+                                                                                    borderTopColor: "var(--primary)",
+                                                                                    borderRadius: "50%"
+                                                                                }}
+                                                                            />
+                                                                            <span style={{ fontSize: "11px" }}>PDF...</span>
+                                                                        </>
+                                                                    ) : (
+                                                                        "PDF"
+                                                                    )}
                                                                 </button>
                                                             </div>
                                                         </td>
@@ -759,26 +882,6 @@ function App() {
                     {page === "settings" && <BusinessSettings />}
                 </main>
 
-                {/* Universal App Footer */}
-                <footer className="app-universal-footer">
-                    <div className="footer-content">
-                        <div className="footer-left">
-                            <span className="footer-status-indicator">
-                                <span className="status-dot-pulse" />
-                                System Operational
-                            </span>
-                            <span className="footer-separator">•</span>
-                            <span>GSTN E-Way & E-Invoice Compliant</span>
-                            <span className="footer-separator">•</span>
-                            <span>© {new Date().getFullYear()} {profile?.businessName || "GST Billing ERP"}</span>
-                        </div>
-                        <div className="footer-right">
-                            <span className="footer-pill">Security: 256-Bit TLS</span>
-                            <span className="footer-pill">Role: {profile?.role || "USER"}</span>
-                            <span className="footer-version">v2.4.0</span>
-                        </div>
-                    </div>
-                </footer>
             </div>
         </div>
     );

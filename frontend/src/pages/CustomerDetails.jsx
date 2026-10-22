@@ -1,8 +1,81 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { getCustomerDetails, getPaymentsForCustomer, downloadInvoicePdf } from "../services/api";
+import { resolveCustomerInvoices, getCustomerInvoiceCount, filterCustomerInvoices, calculateCustomerAggregates } from "../utils/customerHelpers";
 import Icon from "../components/Icon";
+import { Skeleton, SkeletonKpi, SkeletonTable } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import { useToast } from "../context/ToastContext";
+
+function CustomerDetailsSkeleton({ onBack }) {
+    return (
+        <div className="customer-profile-page" aria-busy="true" aria-label="Loading customer profile">
+            <div className="customer-top-nav">
+                <button type="button" className="action-btn-sm" onClick={onBack} title="Return to customer list">
+                    <Icon type="arrowLeft" size={14} />
+                    <span>Back to Customers</span>
+                </button>
+                <div style={{ display: "flex", gap: "10px" }}>
+                    <Skeleton width="100px" height="34px" borderRadius="var(--radius-sm)" />
+                    <Skeleton width="120px" height="34px" borderRadius="var(--radius-sm)" />
+                </div>
+            </div>
+
+            <div className="customer-hero-card" style={{ marginBottom: "20px" }}>
+                <div className="customer-hero-main" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                    <Skeleton width="56px" height="56px" borderRadius="50%" />
+                    <div style={{ flex: 1 }}>
+                        <Skeleton width="240px" height="26px" style={{ marginBottom: "8px" }} />
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <Skeleton width="70px" height="20px" borderRadius="10px" />
+                            <Skeleton width="150px" height="20px" borderRadius="10px" />
+                            <Skeleton width="90px" height="20px" borderRadius="10px" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="customer-financial-grid" style={{ marginBottom: "20px" }}>
+                <SkeletonKpi />
+                <SkeletonKpi />
+                <SkeletonKpi />
+                <SkeletonKpi />
+            </div>
+
+            <div className="customer-details-card" style={{ marginBottom: "20px" }}>
+                <div className="customer-details-grid">
+                    <div className="customer-detail-section">
+                        <Skeleton width="160px" height="18px" style={{ marginBottom: "16px" }} />
+                        <Skeleton width="100%" height="14px" style={{ marginBottom: "10px" }} />
+                        <Skeleton width="90%" height="14px" style={{ marginBottom: "10px" }} />
+                        <Skeleton width="80%" height="14px" />
+                    </div>
+                    <div className="customer-detail-section">
+                        <Skeleton width="160px" height="18px" style={{ marginBottom: "16px" }} />
+                        <Skeleton width="100%" height="14px" style={{ marginBottom: "10px" }} />
+                        <Skeleton width="90%" height="14px" style={{ marginBottom: "10px" }} />
+                        <Skeleton width="80%" height="14px" />
+                    </div>
+                </div>
+            </div>
+
+            <div className="card" style={{ padding: "0" }}>
+                <div style={{ padding: "16px", borderBottom: "1px solid var(--border-color)", display: "flex", gap: "12px" }}>
+                    <Skeleton width="140px" height="36px" borderRadius="var(--radius-sm)" />
+                    <Skeleton width="140px" height="36px" borderRadius="var(--radius-sm)" />
+                    <Skeleton width="140px" height="36px" borderRadius="var(--radius-sm)" />
+                    <Skeleton width="140px" height="36px" borderRadius="var(--radius-sm)" />
+                </div>
+                <div style={{ padding: "16px" }}>
+                    <SkeletonTable rows={4} columns={8} />
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function CustomerDetails({ customerId, onBack, onSelectInvoice, onNewInvoice }) {
+    const toast = useToast();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [data, setData] = useState(null);
@@ -11,28 +84,40 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
     const [copiedField, setCopiedField] = useState("");
     const [invoiceSearch, setInvoiceSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("ALL");
+    const [downloadingPdfId, setDownloadingPdfId] = useState(null);
 
-    useEffect(() => {
+    const loadCustomerData = useCallback(async () => {
         if (!customerId) return;
-        loadCustomerData();
-    }, [customerId]);
-
-    const loadCustomerData = async () => {
         try {
             setLoading(true);
             setError("");
             const [custData, payData] = await Promise.all([
                 getCustomerDetails(customerId),
-                getPaymentsForCustomer(customerId).catch(() => [])
+                getPaymentsForCustomer(customerId).catch(err => {
+                    console.warn("Failed to load customer payments:", err.message);
+                    return [];
+                })
             ]);
             setData(custData);
             setPayments(payData || []);
         } catch (err) {
+            console.error("Failed to load customer profile:", err.message);
+            setData(null);
             setError(err.message || "Failed to load customer profile");
         } finally {
             setLoading(false);
         }
-    };
+    }, [customerId]);
+
+    useEffect(() => {
+        if (!customerId) return;
+        setData(null);
+        setPayments([]);
+        setInvoiceSearch("");
+        setStatusFilter("ALL");
+
+        loadCustomerData();
+    }, [customerId, loadCustomerData]);
 
     const copyToClipboard = (text, field) => {
         if (!text) return;
@@ -49,7 +134,9 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
 
     const handleDownloadPdf = async (e, id, invoiceNum) => {
         e.stopPropagation();
+        if (downloadingPdfId) return;
         try {
+            setDownloadingPdfId(id);
             const blob = await downloadInvoicePdf(id);
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -59,180 +146,40 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            toast.success(`Invoice #${invoiceNum || id} downloaded.`);
         } catch (err) {
-            alert("Could not download PDF: " + err.message);
+            toast.error("Could not download PDF: " + err.message);
+        } finally {
+            setDownloadingPdfId(null);
         }
     };
 
-    // Calculate aggregate GST breakdown and order items
+    // Calculate aggregate GST breakdown, order items, and chronological ledger entries
     const { totalCgst, totalSgst, totalIgst, totalTax, taxableTurnover, orderedItems, ledgerEntries } = useMemo(() => {
-        if (!data || !data.invoices) {
-            return {
-                totalCgst: 0,
-                totalSgst: 0,
-                totalIgst: 0,
-                totalTax: 0,
-                taxableTurnover: 0,
-                orderedItems: [],
-                ledgerEntries: []
-            };
-        }
-
-        let cgstSum = 0;
-        let sgstSum = 0;
-        let igstSum = 0;
-        let taxSum = 0;
-        let taxableSum = 0;
-        const itemMap = new Map();
-
-        const activeInvoices = data.invoices.filter(
-            inv => inv.status !== "CANCELLED" && inv.status !== "DRAFT"
-        );
-
-        data.invoices.forEach(inv => {
-            if (inv.status !== "CANCELLED") {
-                cgstSum += Number(inv.cgst || 0);
-                sgstSum += Number(inv.sgst || 0);
-                igstSum += Number(inv.igst || 0);
-                taxSum += Number(inv.totalTax || 0);
-                taxableSum += Number(inv.taxableAmount || 0);
-            }
-
-            // Aggregate items
-            if (Array.isArray(inv.items)) {
-                inv.items.forEach(item => {
-                    const key = (item.productName || item.itemDescription || "Product").trim().toLowerCase();
-                    const existing = itemMap.get(key) || {
-                        name: item.productName || item.itemDescription || "Item",
-                        hsnCode: item.hsnCode || "—",
-                        unit: item.unit || "PCS",
-                        totalQty: 0,
-                        totalAmount: 0,
-                        taxableAmount: 0,
-                        taxAmount: 0,
-                        gstRate: item.gstRate || 18,
-                        orderCount: 0,
-                        lastDate: inv.invoiceDate
-                    };
-
-                    existing.totalQty += Number(item.quantity || 0);
-                    existing.totalAmount += Number(item.totalAmount || item.total || 0);
-                    existing.taxableAmount += Number(item.taxableAmount || 0);
-                    existing.taxAmount += Number(item.taxAmount || 0);
-                    existing.orderCount += 1;
-                    if (inv.invoiceDate && (!existing.lastDate || inv.invoiceDate > existing.lastDate)) {
-                        existing.lastDate = inv.invoiceDate;
-                    }
-                    itemMap.set(key, existing);
-                });
-            }
-        });
-
-        // Build Chronological Ledger Entries
-        const customer = data.customer;
-        const opening = Number(customer?.openingBalance || 0);
-        const entries = [];
-
-        if (opening !== 0) {
-            entries.push({
-                date: customer?.createdAt ? customer.createdAt.substring(0, 10) : "Initial",
-                type: "OPENING_BALANCE",
-                reference: "Opening Balance",
-                description: "Customer opening balance brought forward",
-                debit: opening > 0 ? opening : 0,
-                credit: opening < 0 ? Math.abs(opening) : 0,
-                timestamp: 0
-            });
-        }
-
-        activeInvoices.forEach(inv => {
-            const grandTotal = Number(inv.grandTotal || 0);
-            entries.push({
-                date: inv.invoiceDate || "—",
-                type: "INVOICE",
-                reference: inv.invoiceNumber,
-                description: `Tax Invoice #${inv.invoiceNumber}`,
-                debit: grandTotal,
-                credit: 0,
-                invoiceId: inv.id,
-                timestamp: new Date(inv.invoiceDate || 0).getTime()
-            });
-        });
-
-        (payments || []).forEach(pay => {
-            const amt = Number(pay.amount || 0);
-            entries.push({
-                date: pay.paymentDate || "—",
-                type: "PAYMENT",
-                reference: pay.referenceNumber || `REC-${pay.id}`,
-                description: `Payment received via ${pay.paymentMethod || "Bank Transfer"}`,
-                debit: 0,
-                credit: amt,
-                paymentId: pay.id,
-                timestamp: new Date(pay.paymentDate || 0).getTime()
-            });
-        });
-
-        // Sort ledger chronologically
-        entries.sort((a, b) => a.timestamp - b.timestamp);
-
-        // Compute running balance
-        let runBal = 0;
-        const computedLedger = entries.map(ent => {
-            runBal += ent.debit - ent.credit;
-            return { ...ent, runningBalance: runBal };
-        });
-
-        return {
-            totalCgst: cgstSum,
-            totalSgst: sgstSum,
-            totalIgst: igstSum,
-            totalTax: taxSum,
-            taxableTurnover: taxableSum,
-            orderedItems: Array.from(itemMap.values()).sort((a, b) => b.totalAmount - a.totalAmount),
-            ledgerEntries: computedLedger
-        };
+        return calculateCustomerAggregates(data, payments);
     }, [data, payments]);
 
     if (loading) {
-        return (
-            <div className="customer-profile-page">
-                <div style={{ padding: "60px", textAlign: "center" }}>
-                    <div className="skeleton-line" style={{ width: "240px", height: "24px", margin: "0 auto 16px" }} />
-                    <div className="skeleton-line" style={{ width: "400px", height: "14px", margin: "0 auto" }} />
-                    <p style={{ color: "var(--text-muted)", marginTop: "16px", fontSize: "14px" }}>
-                        Loading customer ledger and transaction history...
-                    </p>
-                </div>
-            </div>
-        );
+        return <CustomerDetailsSkeleton onBack={onBack} />;
     }
 
     if (error || !data) {
         return (
-            <div className="customer-profile-page">
-                <button type="button" className="action-btn-sm" onClick={onBack} style={{ width: "fit-content" }}>
-                    <Icon type="arrowLeft" />
-                    <span>Back to Customers</span>
-                </button>
-                <div className="alert alert-error" style={{ marginTop: "16px" }}>
-                    <strong>Unable to load customer profile:</strong> {error || "Customer record not found"}
-                </div>
+            <div className="customer-profile-page" style={{ padding: "32px 0" }}>
+                <ErrorState
+                    title="Customer Profile Unavailable"
+                    message={error || "Customer record not found"}
+                    onRetry={loadCustomerData}
+                    secondaryAction={{ label: "Back to Customers", onClick: onBack }}
+                />
             </div>
         );
     }
 
-    const { customer, totalInvoiced, totalPaid, outstandingBalance, overdueAmount, invoices } = data;
-
-    // Filter invoices by search and status
-    const filteredInvoices = (invoices || []).filter(inv => {
-        const matchesStatus = statusFilter === "ALL" || (inv.status || "").toUpperCase() === statusFilter;
-        const q = invoiceSearch.toLowerCase();
-        const matchesSearch = !q ||
-            (inv.invoiceNumber && inv.invoiceNumber.toLowerCase().includes(q)) ||
-            (inv.notes && inv.notes.toLowerCase().includes(q));
-        return matchesStatus && matchesSearch;
-    });
+    const { customer, totalInvoiced, totalPaid, outstandingBalance, overdueAmount } = data;
+    const invoices = resolveCustomerInvoices(data);
+    const filteredInvoices = filterCustomerInvoices(invoices, invoiceSearch, statusFilter);
+    const invoiceCount = getCustomerInvoiceCount(data);
 
     const exportStatementCsv = () => {
         if (!ledgerEntries.length) return;
@@ -493,7 +440,7 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                         >
                             <Icon type="invoice" size={16} />
                             <span>Invoices & Billings</span>
-                            <span className="customer-tab-badge">{invoices?.length || 0}</span>
+                            <span className="customer-tab-badge">{invoiceCount}</span>
                         </button>
 
                         <button
@@ -553,6 +500,7 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                                 >
                                     <option value="ALL">All Statuses</option>
                                     <option value="ISSUED">Issued</option>
+                                    <option value="OVERDUE">Overdue</option>
                                     <option value="PARTIALLY_PAID">Partially Paid</option>
                                     <option value="PAID">Paid</option>
                                     <option value="DRAFT">Draft</option>
@@ -562,15 +510,25 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                         </div>
 
                         {filteredInvoices.length === 0 ? (
-                            <div className="empty-state">
-                                <div className="empty-state-icon">
-                                    <Icon type="invoice" size={26} />
-                                </div>
-                                <h3>No invoices found</h3>
-                                <p>No invoices found matching current filter or search criteria.</p>
-                            </div>
+                            <EmptyState
+                                icon="invoice"
+                                title={invoices.length === 0 ? "No invoices recorded" : "No matching invoices found"}
+                                message={
+                                    invoices.length === 0
+                                        ? "No invoices have been recorded for this customer yet."
+                                        : "No invoices found matching current filter or search criteria."
+                                }
+                                action={
+                                    invoices.length === 0 && onNewInvoice
+                                        ? { label: "Create New Invoice", onClick: () => onNewInvoice(customer), icon: "plus" }
+                                        : invoices.length > 0
+                                        ? { label: "Clear Filters", onClick: () => { setInvoiceSearch(""); setStatusFilter("ALL"); } }
+                                        : null
+                                }
+                            />
                         ) : (
-                            <table className="table">
+                            <div className="table-container">
+                                <table className="table">
                                 <thead>
                                     <tr>
                                         <th>Date</th>
@@ -630,11 +588,16 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                                                     )}
                                                     <button
                                                         type="button"
-                                                        className="action-btn-sm"
+                                                        className={`action-btn-sm ${downloadingPdfId === inv.id ? "btn-loading" : ""}`}
                                                         onClick={(e) => handleDownloadPdf(e, inv.id, inv.invoiceNumber)}
+                                                        disabled={downloadingPdfId === inv.id}
                                                         title="Download GST PDF"
                                                     >
-                                                        <Icon type="download" size={13} />
+                                                        {downloadingPdfId === inv.id ? (
+                                                            <span className="inline-spinner" />
+                                                        ) : (
+                                                            <Icon type="download" size={13} />
+                                                        )}
                                                         <span>PDF</span>
                                                     </button>
                                                 </div>
@@ -643,6 +606,7 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         )}
                     </div>
                 )}
@@ -651,15 +615,14 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                 {activeTab === "orders" && (
                     <div>
                         {orderedItems.length === 0 ? (
-                            <div className="empty-state">
-                                <div className="empty-state-icon">
-                                    <Icon type="product" size={26} />
-                                </div>
-                                <h3>No item purchase history</h3>
-                                <p>No item purchase records available for this customer yet.</p>
-                            </div>
+                            <EmptyState
+                                icon="product"
+                                title="No Item Purchase History"
+                                message="No item purchase records available for this customer yet."
+                            />
                         ) : (
-                            <table className="table">
+                            <div className="table-container">
+                                <table className="table">
                                 <thead>
                                     <tr>
                                         <th>Product / Service Item</th>
@@ -695,6 +658,7 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         )}
                     </div>
                 )}
@@ -703,15 +667,14 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                 {activeTab === "payments" && (
                     <div>
                         {payments.length === 0 ? (
-                            <div className="empty-state">
-                                <div className="empty-state-icon">
-                                    <Icon type="payment" size={26} />
-                                </div>
-                                <h3>No payments recorded</h3>
-                                <p>No payments recorded for this customer yet.</p>
-                            </div>
+                            <EmptyState
+                                icon="payment"
+                                title="No Payments Recorded"
+                                message="No settlement or payment records recorded for this customer yet."
+                            />
                         ) : (
-                            <table className="table">
+                            <div className="table-container">
+                                <table className="table">
                                 <thead>
                                     <tr>
                                         <th>Date</th>
@@ -751,6 +714,7 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         )}
                     </div>
                 )}
@@ -773,12 +737,14 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                         </div>
 
                         {ledgerEntries.length === 0 ? (
-                            <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-                                <Icon type="notes" size={32} color="#cbd5e1" />
-                                <p style={{ marginTop: "12px", fontSize: "14px", fontWeight: 500 }}>No ledger transactions recorded.</p>
-                            </div>
+                            <EmptyState
+                                icon="notes"
+                                title="No Ledger Transactions"
+                                message="No debit/credit running balance entries recorded for this customer."
+                            />
                         ) : (
-                            <table className="table">
+                            <div className="table-container">
+                                <table className="table">
                                 <thead>
                                     <tr>
                                         <th>Date</th>
@@ -820,6 +786,7 @@ export default function CustomerDetails({ customerId, onBack, onSelectInvoice, o
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         )}
                     </div>
                 )}

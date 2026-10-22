@@ -46,7 +46,7 @@ public class PaymentService {
 
     @Transactional
     public PaymentResponse recordPayment(PaymentRequest request) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
 
         Invoice invoice = invoiceRepository.findByIdAndBusiness_Id(request.invoiceId(), businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found with ID: " + request.invoiceId()));
@@ -209,14 +209,14 @@ public class PaymentService {
 
     @Transactional(readOnly = true)
     public Payment getPaymentById(Long paymentId) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         return paymentRepository.findByIdAndBusiness_Id(paymentId, businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment record not found with ID: " + paymentId));
     }
 
     @Transactional(readOnly = true)
     public List<PaymentResponse> getAllPayments() {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         return paymentRepository.findByBusiness_IdOrderByPaymentDateDesc(businessId)
                 .stream()
                 .map(p -> toResponse(p, p.getInvoice()))
@@ -225,7 +225,7 @@ public class PaymentService {
 
     @Transactional(readOnly = true)
     public List<PaymentResponse> getPaymentsForInvoice(Long invoiceId) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         return paymentRepository.findByInvoice_IdAndBusiness_IdOrderByPaymentDateDesc(invoiceId, businessId)
                 .stream()
                 .map(p -> toResponse(p, p.getInvoice()))
@@ -234,7 +234,7 @@ public class PaymentService {
 
     @Transactional(readOnly = true)
     public List<PaymentResponse> getPaymentsForCustomer(Long customerId) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         return paymentRepository.findByCustomer_IdAndBusiness_IdOrderByPaymentDateDesc(customerId, businessId)
                 .stream()
                 .map(p -> toResponse(p, p.getInvoice()))
@@ -243,7 +243,7 @@ public class PaymentService {
 
     @Transactional
     public void deletePayment(Long paymentId) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
 
         Payment payment = paymentRepository.findByIdAndBusiness_Id(paymentId, businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment record not found"));
@@ -266,7 +266,6 @@ public class PaymentService {
         } else if (newPaid.compareTo(BigDecimal.ZERO) > 0) {
             invoice.setStatus("PARTIALLY_PAID");
         } else {
-            // Revert back to ISSUED
             invoice.setStatus("ISSUED");
         }
 
@@ -277,6 +276,53 @@ public class PaymentService {
 
         auditLogService.logAction("DELETE_PAYMENT", "PAYMENT", paymentId,
                 "Payment of Rs. " + payment.getAmount() + " deleted for invoice " + invoice.getInvoiceNumber());
+    }
+
+    @Transactional
+    public PaymentResponse recordRefund(Long paymentId, BigDecimal refundAmount, String reason) {
+        Long businessId = currentUserService.getCurrentTenantId();
+        Payment payment = paymentRepository.findByIdAndBusiness_Id(paymentId, businessId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Payment record not found"));
+
+        if ("REFUNDED".equalsIgnoreCase(payment.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Payment has already been refunded");
+        }
+
+        BigDecimal refAmt = (refundAmount != null && refundAmount.compareTo(BigDecimal.ZERO) > 0)
+                ? refundAmount.setScale(2, RoundingMode.HALF_UP)
+                : payment.getAmount().setScale(2, RoundingMode.HALF_UP);
+
+        if (refAmt.compareTo(payment.getAmount()) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Refund amount cannot exceed payment amount");
+        }
+
+        payment.setStatus("REFUNDED");
+        payment.setNotes((payment.getNotes() != null ? payment.getNotes() + " | " : "") + "Refunded: " + (reason != null ? reason : ""));
+        Payment saved = paymentRepository.save(payment);
+
+        Invoice invoice = payment.getInvoice();
+        BigDecimal currentPaid = invoice.getPaidAmount() != null ? invoice.getPaidAmount() : BigDecimal.ZERO;
+        BigDecimal newPaid = currentPaid.subtract(refAmt).setScale(2, RoundingMode.HALF_UP);
+        if (newPaid.compareTo(BigDecimal.ZERO) < 0) newPaid = BigDecimal.ZERO;
+
+        BigDecimal grandTotal = invoice.getGrandTotal() != null ? invoice.getGrandTotal() : BigDecimal.ZERO;
+        BigDecimal newBalance = grandTotal.subtract(newPaid).setScale(2, RoundingMode.HALF_UP);
+
+        invoice.setPaidAmount(newPaid);
+        invoice.setBalanceAmount(newBalance);
+        if (newBalance.compareTo(BigDecimal.ZERO) <= 0) {
+            invoice.setStatus("PAID");
+        } else if (newPaid.compareTo(BigDecimal.ZERO) > 0) {
+            invoice.setStatus("PARTIALLY_PAID");
+        } else {
+            invoice.setStatus("ISSUED");
+        }
+        invoiceRepository.save(invoice);
+
+        auditLogService.logAction("PAYMENT_REFUNDED", "PAYMENT", saved.getId(),
+                "Refunded Rs. " + refAmt + " for payment ID " + paymentId + ". Reason: " + reason);
+
+        return toResponse(saved, invoice);
     }
 
     public PaymentResponse toResponse(Payment p, Invoice inv) {

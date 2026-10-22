@@ -1,13 +1,28 @@
 import React, { useEffect, useState } from "react";
 import Icon from "../components/Icon";
 import { getSuppliers, createSupplier, updateSupplier, deleteSupplier, getSupplierDetails } from "../services/api";
+import { SkeletonTable } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
+import { useToast } from "../context/ToastContext";
 
 export default function Suppliers() {
+    const toast = useToast();
     const [suppliers, setSuppliers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [successMessage, setSuccessMessage] = useState("");
     const [search, setSearch] = useState("");
+
+    // Confirm dialog
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: "",
+        message: "",
+        confirmVariant: "danger",
+        onConfirm: null
+    });
+    const [actionLoading, setActionLoading] = useState(false);
 
     // Modal
     const [showModal, setShowModal] = useState(false);
@@ -28,10 +43,18 @@ export default function Suppliers() {
 
     // Details Modal
     const [detailsSupplier, setDetailsSupplier] = useState(null);
-    const [detailsLoading, setDetailsLoading] = useState(false);
+    const [detailsLoadingId, setDetailsLoadingId] = useState(null);
 
     useEffect(() => {
         loadSuppliers();
+    }, [search]);
+
+    useEffect(() => {
+        const handleBizSwitch = () => {
+            loadSuppliers();
+        };
+        window.addEventListener("business-switched", handleBizSwitch);
+        return () => window.removeEventListener("business-switched", handleBizSwitch);
     }, [search]);
 
     async function loadSuppliers() {
@@ -86,13 +109,12 @@ export default function Suppliers() {
             setModalError("");
             if (editingSupplier) {
                 await updateSupplier(editingSupplier.id, formData);
-                setSuccessMessage("Supplier updated successfully!");
+                toast.success("Supplier updated successfully");
             } else {
                 await createSupplier(formData);
-                setSuccessMessage("Supplier created successfully!");
+                toast.success("Supplier created successfully");
             }
             setShowModal(false);
-            setTimeout(() => setSuccessMessage(""), 4000);
             await loadSuppliers();
         } catch (err) {
             setModalError(err.message || "Failed to save supplier");
@@ -101,27 +123,37 @@ export default function Suppliers() {
         }
     }
 
-    async function handleDelete(id) {
-        if (!window.confirm("Are you sure you want to delete this supplier?")) return;
-        try {
-            await deleteSupplier(id);
-            setSuccessMessage("Supplier deleted successfully.");
-            setTimeout(() => setSuccessMessage(""), 4000);
-            await loadSuppliers();
-        } catch (err) {
-            setError(err.message || "Failed to delete supplier");
-        }
+    function handleDelete(id) {
+        setConfirmModal({
+            isOpen: true,
+            title: "Delete Supplier",
+            message: "Are you sure you want to delete this supplier? This action cannot be undone.",
+            confirmVariant: "danger",
+            onConfirm: async () => {
+                try {
+                    setActionLoading(true);
+                    await deleteSupplier(id);
+                    toast.success("Supplier deleted successfully");
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    await loadSuppliers();
+                } catch (err) {
+                    toast.error(err.message || "Failed to delete supplier");
+                } finally {
+                    setActionLoading(false);
+                }
+            }
+        });
     }
 
     async function viewDetails(id) {
         try {
-            setDetailsLoading(true);
+            setDetailsLoadingId(id);
             const details = await getSupplierDetails(id);
             setDetailsSupplier(details);
         } catch (err) {
-            setError(err.message || "Failed to load supplier details");
+            toast.error(err.message || "Failed to load supplier details");
         } finally {
-            setDetailsLoading(false);
+            setDetailsLoadingId(null);
         }
     }
 
@@ -141,16 +173,11 @@ export default function Suppliers() {
                 </button>
             </div>
 
-            {successMessage && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Icon type="checkCircle" size={16} color="#065f46" /> {successMessage}
-                </div>
-            )}
-
             {error && (
-                <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", borderRadius: "8px" }}>
-                    {error}
-                </div>
+                <ErrorState
+                    message={error}
+                    onRetry={loadSuppliers}
+                />
             )}
 
             <div className="card" style={{ padding: "16px 20px" }}>
@@ -181,61 +208,63 @@ export default function Suppliers() {
 
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
                 {loading ? (
-                    <div style={{ padding: "40px", textAlign: "center" }}>
-                        <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                        <p>Loading suppliers...</p>
-                    </div>
+                    <SkeletonTable rows={5} columns={7} />
                 ) : suppliers.length === 0 ? (
-                    <div className="empty-state">
-                        <div className="empty-state-icon">
-                            <Icon type="supplier" size={26} />
-                        </div>
-                        <h3>No suppliers found</h3>
-                        <p>Maintain vendor directories, track purchase terms, and record inward bills.</p>
-                        <button className="primary-button" onClick={() => openModal()}>
-                            <Icon type="plus" size={13} />
-                            <span>Add First Supplier</span>
-                        </button>
-                    </div>
+                    <EmptyState
+                        icon="supplier"
+                        title={search ? "No suppliers match your search" : "No suppliers found"}
+                        message={search ? `No vendor records matched "${search}". Try adjusting your search query.` : "Maintain vendor directories, track purchase terms, and record inward bills."}
+                        actionLabel={search ? "Clear Search" : "Add First Supplier"}
+                        actionIcon={search ? "close" : "plus"}
+                        onAction={search ? () => setSearch("") : () => openModal()}
+                    />
                 ) : (
-                    <table className="table" style={{ width: "100%", margin: 0 }}>
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>GSTIN</th>
-                                <th>PAN</th>
-                                <th>State</th>
-                                <th>Phone</th>
-                                <th>Terms</th>
-                                <th style={{ textAlign: "center" }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {suppliers.map(s => (
-                                <tr key={s.id}>
-                                    <td style={{ fontWeight: "600" }}>{s.name}</td>
-                                    <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{s.gstin || "Unregistered"}</td>
-                                    <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{s.pan || "-"}</td>
-                                    <td>{s.state || "-"}</td>
-                                    <td>{s.phone || "-"}</td>
-                                    <td>{s.paymentTerms ? `${s.paymentTerms} Days` : "-"}</td>
-                                    <td style={{ textAlign: "center" }}>
-                                        <div style={{ display: "inline-flex", gap: "6px" }}>
-                                            <button className="btn btn-secondary btn-sm" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={() => viewDetails(s.id)}>
-                                                Ledger
-                                            </button>
-                                            <button className="btn btn-secondary btn-sm" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={() => openModal(s)}>
-                                                Edit
-                                            </button>
-                                            <button className="btn btn-danger btn-sm" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={() => handleDelete(s.id)}>
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
+                    <div className="table-container">
+                        <table className="table" style={{ width: "100%", margin: 0 }}>
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>GSTIN</th>
+                                    <th>PAN</th>
+                                    <th>State</th>
+                                    <th>Phone</th>
+                                    <th>Terms</th>
+                                    <th style={{ textAlign: "center" }}>Actions</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {suppliers.map(s => (
+                                    <tr key={s.id}>
+                                        <td style={{ fontWeight: "600" }}>{s.name}</td>
+                                        <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{s.gstin || "Unregistered"}</td>
+                                        <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{s.pan || "-"}</td>
+                                        <td>{s.state || "-"}</td>
+                                        <td>{s.phone || "-"}</td>
+                                        <td>{s.paymentTerms ? `${s.paymentTerms} Days` : "-"}</td>
+                                        <td style={{ textAlign: "center" }}>
+                                            <div style={{ display: "inline-flex", gap: "6px" }}>
+                                                <button
+                                                    className={`btn btn-secondary btn-sm ${detailsLoadingId === s.id ? "btn-loading" : ""}`}
+                                                    style={{ padding: "3px 8px", fontSize: "11px" }}
+                                                    onClick={() => viewDetails(s.id)}
+                                                    disabled={detailsLoadingId === s.id}
+                                                >
+                                                    {detailsLoadingId === s.id && <span className="inline-spinner" />}
+                                                    <span>Ledger</span>
+                                                </button>
+                                                <button className="btn btn-secondary btn-sm" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={() => openModal(s)}>
+                                                    Edit
+                                                </button>
+                                                <button className="btn btn-danger btn-sm" style={{ padding: "3px 8px", fontSize: "11px" }} onClick={() => handleDelete(s.id)}>
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
@@ -370,8 +399,9 @@ export default function Suppliers() {
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                                    {submitting ? "Saving..." : "Save Supplier"}
+                                <button type="submit" className={`btn btn-primary ${submitting ? "btn-loading" : ""}`} disabled={submitting}>
+                                    {submitting && <span className="inline-spinner" />}
+                                    <span>{submitting ? "Saving..." : "Save Supplier"}</span>
                                 </button>
                             </div>
                         </form>
@@ -444,6 +474,12 @@ export default function Suppliers() {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                {...confirmModal}
+                loading={actionLoading}
+                onClose={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+            />
         </div>
     );
 }

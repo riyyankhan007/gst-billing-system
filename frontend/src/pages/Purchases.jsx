@@ -1,14 +1,29 @@
 import React, { useEffect, useState } from "react";
 import Icon from "../components/Icon";
 import { getPurchases, createPurchase, deletePurchase, recordPurchasePayment, getSuppliers, getProducts } from "../services/api";
+import { SkeletonTable } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
+import { useToast } from "../context/ToastContext";
 
 export default function Purchases() {
+    const toast = useToast();
     const [purchases, setPurchases] = useState([]);
     const [suppliers, setSuppliers] = useState([]);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [successMessage, setSuccessMessage] = useState("");
+
+    // Confirm Modal
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: "",
+        message: "",
+        confirmVariant: "danger",
+        onConfirm: null
+    });
+    const [actionLoading, setActionLoading] = useState(false);
 
     // Create Modal
     const [showModal, setShowModal] = useState(false);
@@ -26,9 +41,18 @@ export default function Purchases() {
     // Payment Modal
     const [payModalPurchase, setPayModalPurchase] = useState(null);
     const [payAmount, setPayAmount] = useState("");
+    const [paySubmitting, setPaySubmitting] = useState(false);
 
     useEffect(() => {
         loadData();
+    }, []);
+
+    useEffect(() => {
+        const handleBizSwitch = () => {
+            loadData();
+        };
+        window.addEventListener("business-switched", handleBizSwitch);
+        return () => window.removeEventListener("business-switched", handleBizSwitch);
     }, []);
 
     async function loadData() {
@@ -129,11 +153,11 @@ export default function Purchases() {
             });
 
             setShowModal(false);
-            setSuccessMessage("Purchase recorded and product stock automatically updated!");
-            setTimeout(() => setSuccessMessage(""), 4000);
+            toast.success("Purchase recorded and product stock automatically updated!");
             await loadData();
         } catch (err) {
             setModalError(err.message || "Failed to save purchase bill");
+            toast.error(err.message || "Failed to save purchase bill");
         } finally {
             setSubmitting(false);
         }
@@ -143,26 +167,39 @@ export default function Purchases() {
         e.preventDefault();
         if (!payModalPurchase || !payAmount) return;
         try {
+            setPaySubmitting(true);
             await recordPurchasePayment(payModalPurchase.id, Number(payAmount));
             setPayModalPurchase(null);
-            setSuccessMessage("Payment to vendor recorded successfully.");
-            setTimeout(() => setSuccessMessage(""), 4000);
+            toast.success("Payment to vendor recorded successfully.");
             await loadData();
         } catch (err) {
-            alert(err.message || "Failed to record payment");
+            toast.error(err.message || "Failed to record payment");
+        } finally {
+            setPaySubmitting(false);
         }
     }
 
-    async function handleDelete(id) {
-        if (!window.confirm("Deleting this purchase will revert added stock for these products. Are you sure?")) return;
-        try {
-            await deletePurchase(id);
-            setSuccessMessage("Purchase deleted and stock reverted.");
-            setTimeout(() => setSuccessMessage(""), 4000);
-            await loadData();
-        } catch (err) {
-            setError(err.message || "Failed to delete purchase");
-        }
+    function handleDelete(id) {
+        setConfirmModal({
+            isOpen: true,
+            title: "Delete Purchase Bill?",
+            message: "Deleting this purchase will automatically revert the added inventory stock for all bill items. This action cannot be undone.",
+            confirmVariant: "danger",
+            confirmLabel: "Delete Purchase",
+            onConfirm: async () => {
+                try {
+                    setActionLoading(true);
+                    await deletePurchase(id);
+                    toast.success("Purchase deleted and stock reverted.");
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    await loadData();
+                } catch (err) {
+                    toast.error(err.message || "Failed to delete purchase");
+                } finally {
+                    setActionLoading(false);
+                }
+            }
+        });
     }
 
     return (
@@ -185,12 +222,6 @@ export default function Purchases() {
                 </div>
             )}
 
-            {successMessage && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Icon type="checkCircle" size={16} color="#065f46" /> {successMessage}
-                </div>
-            )}
-
             {error && (
                 <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", borderRadius: "8px" }}>
                     {error}
@@ -199,24 +230,20 @@ export default function Purchases() {
 
             <div className="table-card">
                 {loading ? (
-                    <div style={{ padding: "40px", textAlign: "center" }}>
-                        <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                        <p>Loading purchase records...</p>
+                    <div style={{ padding: "16px" }}>
+                        <SkeletonTable rows={5} columns={10} />
                     </div>
                 ) : purchases.length === 0 ? (
-                    <div className="empty-state">
-                        <div className="empty-state-icon">
-                            <Icon type="purchase" size={26} />
-                        </div>
-                        <h3>No purchase bills recorded yet</h3>
-                        <p>Record vendor inward bills to claim Input Tax Credit (ITC) and update inventory stock.</p>
-                        {suppliers.length > 0 && (
-                            <button className="primary-button" onClick={openCreateModal}>
-                                <Icon type="plus" size={13} />
-                                <span>Record First Purchase</span>
-                            </button>
-                        )}
-                    </div>
+                    <EmptyState
+                        icon="purchase"
+                        title="No purchase bills recorded yet"
+                        message="Record vendor inward bills to claim Input Tax Credit (ITC) and update inventory stock."
+                        action={
+                            suppliers.length > 0
+                                ? { label: "Record First Purchase", onClick: openCreateModal, icon: "plus" }
+                                : null
+                        }
+                    />
                 ) : (
                     <div className="table-container">
                         <table className="table">
@@ -300,7 +327,7 @@ export default function Purchases() {
                         )}
 
                         <form onSubmit={handleCreateSubmit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                            <div className="form-grid-2">
                                 <div>
                                     <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
                                         Supplier / Vendor *
@@ -333,7 +360,7 @@ export default function Purchases() {
                                 </div>
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
+                            <div className="form-grid-3">
                                 <div>
                                     <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
                                         Purchase Date *
@@ -383,9 +410,9 @@ export default function Purchases() {
 
                                 <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                                     {items.map((it, idx) => (
-                                        <div key={idx} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 1fr auto", gap: "8px", alignItems: "center" }}>
+                                        <div key={idx} className="purchase-item-row">
                                             <select
-                                                className="input"
+                                                className="input purchase-item-product"
                                                 value={it.productId}
                                                 onChange={e => handleItemChange(idx, "productId", e.target.value)}
                                                 required
@@ -442,7 +469,7 @@ export default function Purchases() {
 
                                             <button
                                                 type="button"
-                                                className="btn btn-danger btn-sm"
+                                                className="btn btn-danger btn-sm purchase-item-delete"
                                                 onClick={() => removeItemRow(idx)}
                                                 disabled={items.length === 1}
                                                 title="Remove item"
@@ -458,8 +485,15 @@ export default function Purchases() {
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                                    {submitting ? "Saving & Updating Stock..." : "Save Purchase Bill"}
+                                <button type="submit" className={`primary-button ${submitting ? "btn-loading" : ""}`} disabled={submitting}>
+                                    {submitting ? (
+                                        <>
+                                            <span className="inline-spinner" />
+                                            <span>Saving & Updating Stock...</span>
+                                        </>
+                                    ) : (
+                                        "Save Purchase Bill"
+                                    )}
                                 </button>
                             </div>
                         </form>
@@ -500,14 +534,32 @@ export default function Purchases() {
                                 <button type="button" className="btn btn-secondary" onClick={() => setPayModalPurchase(null)}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary">
-                                    Confirm Payment
+                                <button type="submit" className={`btn btn-primary ${paySubmitting ? "btn-loading" : ""}`} disabled={paySubmitting}>
+                                    {paySubmitting ? (
+                                        <>
+                                            <span className="inline-spinner" />
+                                            <span>Confirming...</span>
+                                        </>
+                                    ) : (
+                                        "Confirm Payment"
+                                    )}
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmLabel={confirmModal.confirmLabel}
+                confirmVariant={confirmModal.confirmVariant}
+                isLoading={actionLoading}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+            />
         </div>
     );
 }

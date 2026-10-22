@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Icon from "../components/Icon";
 import HsnSacAutocomplete from "../components/HsnSacAutocomplete";
 import HsnSacAdminImport from "../components/HsnSacAdminImport";
@@ -11,11 +11,17 @@ import {
     deleteProduct,
     getCustomerDetails
 } from "../services/api";
+import { SkeletonTable } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
+import { useToast } from "../context/ToastContext";
 
 const GST_RATES = [0, 5, 12, 18, 28];
 const COMMON_UNITS = ["PCS", "NOS", "KGS", "MTR", "BOX", "SET", "LTR", "PKT", "BAG"];
 
 export default function ManageData({ kind, onViewCustomer }) {
+    const toast = useToast();
     const isCustomer = kind === "customers";
 
     const [items, setItems] = useState([]);
@@ -23,27 +29,46 @@ export default function ManageData({ kind, onViewCustomer }) {
     const [search, setSearch] = useState("");
     const [filterType, setFilterType] = useState("ALL");
     const [error, setError] = useState("");
-    const [success, setSuccess] = useState("");
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [showForm, setShowForm] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
 
     // Customer Details modal
     const [selectedCustomerDetails, setSelectedCustomerDetails] = useState(null);
+    const [detailsLoadingId, setDetailsLoadingId] = useState(null);
 
-    const loadData = async () => {
+    // Delete Confirmation dialog
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: "",
+        message: "",
+        confirmVariant: "danger",
+        onConfirm: null
+    });
+    const [deleteLoading, setDeleteLoading] = useState(false);
+
+    const loadData = useCallback(async (preserveExisting = false) => {
         try {
-            setLoading(true);
+            if (!preserveExisting) {
+                setLoading(true);
+            } else {
+                setRefreshing(true);
+            }
             const data = isCustomer ? await getCustomers(search) : await getProducts(search);
             setItems(data || []);
             setError("");
         } catch (err) {
             setError(err.message || "Failed to load data");
+            if (!preserveExisting) {
+                toast.error(err.message || "Failed to load data");
+            }
         } finally {
             setLoading(false);
+            setRefreshing(false);
         }
-    };
+    }, [isCustomer, search, toast]);
 
     useEffect(() => {
         setForm(isCustomer ? {
@@ -77,9 +102,16 @@ export default function ManageData({ kind, onViewCustomer }) {
         setSearch("");
         setFilterType("ALL");
         setError("");
-        setSuccess("");
-        loadData();
-    }, [kind]);
+        loadData(false);
+    }, [isCustomer, loadData]);
+
+    useEffect(() => {
+        const handleBizSwitch = () => {
+            loadData(false);
+        };
+        window.addEventListener("business-switched", handleBizSwitch);
+        return () => window.removeEventListener("business-switched", handleBizSwitch);
+    }, [loadData]);
 
     const handleInputChange = (field, value) => {
         setForm(prev => ({
@@ -92,7 +124,6 @@ export default function ManageData({ kind, onViewCustomer }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError("");
-        setSuccess("");
         setSaving(true);
 
         try {
@@ -108,7 +139,7 @@ export default function ManageData({ kind, onViewCustomer }) {
                 body.openingBalance = Number(body.openingBalance || 0);
 
                 await createCustomer(body);
-                setSuccess(`Customer "${body.name}" added successfully!`);
+                toast.success(`Customer "${body.name}" added successfully!`);
             } else {
                 if (!body.name?.trim()) throw new Error("Product name is required (*)");
                 if (body.price === undefined || body.price === "") throw new Error("Price is required (*)");
@@ -121,7 +152,7 @@ export default function ManageData({ kind, onViewCustomer }) {
                 body.taxInclusive = Boolean(body.taxInclusive);
 
                 await createProduct(body);
-                setSuccess(`Product "${body.name}" added successfully!`);
+                toast.success(`Product "${body.name}" added successfully!`);
             }
 
             // Reset form
@@ -153,42 +184,53 @@ export default function ManageData({ kind, onViewCustomer }) {
                 stockQuantity: "100",
                 lowStockThreshold: "10"
             });
-            await loadData();
+            setShowForm(false);
+            await loadData(true);
         } catch (err) {
             setError(err.message || "Failed to save record");
+            toast.error(err.message || "Failed to save record");
         } finally {
             setSaving(false);
         }
     };
 
-    const handleDelete = async (id, name) => {
+    const handleDelete = (id, name) => {
         const itemType = isCustomer ? "customer" : "product";
-        if (!window.confirm(`Are you sure you want to delete ${name || thisItem}?`)) {
-            return;
-        }
-
-        try {
-            if (isCustomer) {
-                await deleteCustomer(id);
-            } else {
-                await deleteProduct(id);
+        setConfirmModal({
+            isOpen: true,
+            title: `Delete ${isCustomer ? "Customer" : "Product"}?`,
+            message: `Are you sure you want to delete "${name || id}"? This action cannot be undone.`,
+            confirmVariant: "danger",
+            confirmLabel: "Delete",
+            onConfirm: async () => {
+                try {
+                    setDeleteLoading(true);
+                    if (isCustomer) {
+                        await deleteCustomer(id);
+                    } else {
+                        await deleteProduct(id);
+                    }
+                    toast.success(`${isCustomer ? "Customer" : "Product"} deleted successfully.`);
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    await loadData(true);
+                } catch (err) {
+                    toast.error(err.message || `Failed to delete ${itemType}`);
+                } finally {
+                    setDeleteLoading(false);
+                }
             }
-            setSuccess(`${isCustomer ? "Customer" : "Product"} deleted successfully.`);
-            await loadData();
-        } catch (err) {
-            setError(err.message || `Failed to delete ${itemType}`);
-        }
+        });
     };
 
     const handleViewCustomerDetails = async (id) => {
         try {
-            setDetailsLoading(true);
+            setDetailsLoadingId(id);
             const data = await getCustomerDetails(id);
             setSelectedCustomerDetails(data);
         } catch (err) {
-            alert(err.message || "Failed to load customer details");
+            toast.error(err.message || "Failed to load customer details");
         } finally {
-            setDetailsLoading(false);
+            setDetailsLoadingId(null);
         }
     };
 
@@ -249,15 +291,10 @@ export default function ManageData({ kind, onViewCustomer }) {
                 </div>
             </div>
 
-            {/* Error & Success Banners */}
+            {/* Error Banner */}
             {error && (
                 <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.12)", color: "var(--danger)", borderRadius: "var(--radius-sm)", border: "1px solid #fecaca", fontWeight: 500 }}>
                     {error}
-                </div>
-            )}
-            {success && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.12)", color: "#065f46", borderRadius: "var(--radius-sm)", border: "1px solid #a7f3d0", fontWeight: 600, display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Icon type="checkCircle" size={16} color="#065f46" /> {success}
                 </div>
             )}
 
@@ -601,8 +638,15 @@ export default function ManageData({ kind, onViewCustomer }) {
                                 <button type="button" className="secondary-button" onClick={() => setShowForm(false)}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="primary-button" disabled={saving}>
-                                    {saving ? "Saving..." : isCustomer ? "Save Customer" : "Save Product"}
+                                <button type="submit" className={`primary-button ${saving ? "btn-loading" : ""}`} disabled={saving}>
+                                    {saving ? (
+                                        <>
+                                            <span className="inline-spinner" />
+                                            <span>Saving...</span>
+                                        </>
+                                    ) : (
+                                        isCustomer ? "Save Customer" : "Save Product"
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -665,34 +709,47 @@ export default function ManageData({ kind, onViewCustomer }) {
                 </div>
 
                 {/* Items Table */}
-                <div className="table-container">
+                <div className="table-container" style={{ position: "relative" }}>
+                    {refreshing && (
+                        <div className="refresh-indicator" style={{ position: "absolute", top: "12px", right: "12px", zIndex: 10 }}>
+                            <span className="inline-spinner" />
+                            <span>Updating...</span>
+                        </div>
+                    )}
                     {loading ? (
-                        <div style={{ padding: "40px", textAlign: "center" }}>
-                            <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                            <p>Loading records...</p>
+                        <div style={{ padding: "16px" }}>
+                            <SkeletonTable rows={6} columns={isCustomer ? 7 : 7} />
+                        </div>
+                    ) : error && items.length === 0 ? (
+                        <div style={{ padding: "32px 16px" }}>
+                            <ErrorState
+                                title={isCustomer ? "Customers Unavailable" : "Catalog Unavailable"}
+                                message={error}
+                                onRetry={() => loadData(false)}
+                            />
                         </div>
                     ) : filteredItems.length === 0 ? (
-                        <div className="empty-state">
-                            <div className="empty-state-icon">
-                                <Icon type={isCustomer ? "customer" : "product"} size={26} />
-                            </div>
-                            <h3>No {isCustomer ? "customers" : "products"} found</h3>
-                            <p>
-                                {isCustomer
-                                    ? "Add your client directory with GSTIN, billing address, and contact information."
-                                    : "Add your product catalog items with HSN codes, unit pricing, and standard GST tax rates."}
-                            </p>
-                            <button
-                                type="button"
-                                className="primary-button"
-                                onClick={() => setShowForm(true)}
-                            >
-                                <Icon type="plus" size={13} />
-                                <span>{isCustomer ? "Add First Customer" : "Add First Product"}</span>
-                            </button>
-                        </div>
+                        <EmptyState
+                            icon={isCustomer ? "customer" : "product"}
+                            title={items.length === 0 ? `No ${isCustomer ? "customers" : "products"} added yet` : `No matching ${isCustomer ? "customers" : "products"} found`}
+                            message={
+                                items.length === 0
+                                    ? (isCustomer
+                                        ? "Add your client directory with GSTIN, billing address, and contact information to begin issuing invoices."
+                                        : "Add your product catalog items with HSN codes, unit pricing, and standard GST tax rates.")
+                                    : "No records match the current search query or filter. Try clearing your filters."
+                            }
+                            action={
+                                items.length === 0
+                                    ? { label: isCustomer ? "Add First Customer" : "Add First Product", onClick: () => setShowForm(true), icon: "plus" }
+                                    : search || filterType !== "ALL"
+                                    ? { label: "Clear Search & Filters", onClick: () => { setSearch(""); setFilterType("ALL"); } }
+                                    : null
+                            }
+                        />
                     ) : isCustomer ? (
-                        <table className="table">
+                        <div className="table-container">
+                            <table className="table">
                             <thead>
                                 <tr>
                                     <th>Customer Name</th>
@@ -741,11 +798,19 @@ export default function ManageData({ kind, onViewCustomer }) {
                                             <div style={{ display: "inline-flex", gap: "8px", justifyContent: "flex-end" }}>
                                                 <button
                                                     type="button"
-                                                    className="action-btn-sm"
+                                                    className={`action-btn-sm ${detailsLoadingId === c.id ? "btn-loading" : ""}`}
                                                     onClick={() => onViewCustomer ? onViewCustomer(c.id) : handleViewCustomerDetails(c.id)}
+                                                    disabled={detailsLoadingId === c.id}
                                                     title="View full customer profile, orders and ledger"
                                                 >
-                                                    View Profile
+                                                    {detailsLoadingId === c.id ? (
+                                                        <>
+                                                            <span className="inline-spinner" />
+                                                            <span>Loading...</span>
+                                                        </>
+                                                    ) : (
+                                                        <span>View Profile</span>
+                                                    )}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -761,8 +826,10 @@ export default function ManageData({ kind, onViewCustomer }) {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
                     ) : (
-                        <table className="table">
+                        <div className="table-container">
+                            <table className="table">
                             <thead>
                                 <tr>
                                     <th>Item Name</th>
@@ -841,6 +908,7 @@ export default function ManageData({ kind, onViewCustomer }) {
                                 })}
                             </tbody>
                         </table>
+                    </div>
                     )}
                 </div>
             </div>
@@ -878,39 +946,48 @@ export default function ManageData({ kind, onViewCustomer }) {
                             </div>
                         </div>
 
-                        <h4 style={{ margin: "0 0 10px", fontSize: "14px" }}>
-                            Invoice History ({selectedCustomerDetails.invoices ? selectedCustomerDetails.invoices.length : 0})
-                        </h4>
-                        {(!selectedCustomerDetails.invoices || selectedCustomerDetails.invoices.length === 0) ? (
-                            <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No invoices for this customer yet.</p>
-                        ) : (
-                            <div className="table-container">
-                                <table className="table" style={{ fontSize: "12px" }}>
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Invoice #</th>
-                                            <th style={{ textAlign: "right" }}>Grand Total</th>
-                                            <th style={{ textAlign: "right" }}>Paid</th>
-                                            <th style={{ textAlign: "right" }}>Balance</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {selectedCustomerDetails.invoices.map(inv => (
-                                            <tr key={inv.id}>
-                                                <td>{inv.invoiceDate}</td>
-                                                <td style={{ fontWeight: "600", color: "var(--primary)" }}>{inv.invoiceNumber}</td>
-                                                <td className="table-num" style={{ textAlign: "right" }}>{fmt(inv.grandTotal)}</td>
-                                                <td className="table-num" style={{ textAlign: "right", color: "var(--success)" }}>{fmt(inv.paidAmount)}</td>
-                                                <td className="table-num" style={{ textAlign: "right", color: "var(--danger)", fontWeight: 600 }}>{fmt(inv.balanceAmount)}</td>
-                                                <td><span className={`status-badge status-${(inv.status || "DRAFT").toLowerCase()}`}>{inv.status}</span></td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
+                        {(() => {
+                            const modalInvoices = Array.isArray(selectedCustomerDetails.invoices)
+                                ? selectedCustomerDetails.invoices
+                                : (Array.isArray(selectedCustomerDetails.recentInvoices) ? selectedCustomerDetails.recentInvoices : []);
+                            return (
+                                <>
+                                    <h4 style={{ margin: "0 0 10px", fontSize: "14px" }}>
+                                        Invoice History ({selectedCustomerDetails.totalInvoicesCount ?? modalInvoices.length})
+                                    </h4>
+                                    {modalInvoices.length === 0 ? (
+                                        <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>No invoices for this customer yet.</p>
+                                    ) : (
+                                        <div className="table-container">
+                                            <table className="table" style={{ fontSize: "12px" }}>
+                                                <thead>
+                                                    <tr>
+                                                        <th>Date</th>
+                                                        <th>Invoice #</th>
+                                                        <th style={{ textAlign: "right" }}>Grand Total</th>
+                                                        <th style={{ textAlign: "right" }}>Paid</th>
+                                                        <th style={{ textAlign: "right" }}>Balance</th>
+                                                        <th>Status</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {modalInvoices.map(inv => (
+                                                        <tr key={inv.id}>
+                                                            <td>{inv.invoiceDate}</td>
+                                                            <td style={{ fontWeight: "600", color: "var(--primary)" }}>{inv.invoiceNumber}</td>
+                                                            <td className="table-num" style={{ textAlign: "right" }}>{fmt(inv.grandTotal)}</td>
+                                                            <td className="table-num" style={{ textAlign: "right", color: "var(--success)" }}>{fmt(inv.paidAmount)}</td>
+                                                            <td className="table-num" style={{ textAlign: "right", color: "var(--danger)", fontWeight: 600 }}>{fmt(inv.balanceAmount)}</td>
+                                                            <td><span className={`status-badge status-${(inv.status || "DRAFT").toLowerCase()}`}>{inv.status}</span></td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </>
+                            );
+                        })()}
 
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px" }}>
                             {onViewCustomer ? (
@@ -943,6 +1020,17 @@ export default function ManageData({ kind, onViewCustomer }) {
                     }}
                 />
             )}
+
+            <ConfirmDialog
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmLabel={confirmModal.confirmLabel}
+                confirmVariant={confirmModal.confirmVariant}
+                isLoading={deleteLoading}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+            />
         </div>
     );
 }

@@ -18,12 +18,93 @@ import {
     downloadPaymentReceiptPdf,
     getAssetUrl
 } from "../services/api";
+import { Skeleton, SkeletonTable } from "../components/ui/Skeleton";
+import ErrorState from "../components/ui/ErrorState";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
+import { useToast } from "../context/ToastContext";
+
+function InvoiceDetailsSkeleton({ onBack }) {
+    return (
+        <div className="invoice-view-container" aria-busy="true" aria-label="Loading invoice details">
+            <div className="invoice-top-nav">
+                <button type="button" className="action-btn-sm" onClick={onBack} title="Back to Invoices">
+                    <Icon type="arrowLeft" size={13} />
+                    <span>Back to Invoices</span>
+                </button>
+                <div className="invoice-top-nav-actions" style={{ display: "flex", gap: "8px" }}>
+                    <Skeleton width="130px" height="34px" borderRadius="var(--radius-sm)" />
+                    <Skeleton width="110px" height="34px" borderRadius="var(--radius-sm)" />
+                </div>
+            </div>
+
+            <div style={{ background: "var(--bg-card)", border: "1px solid var(--border-color)", borderRadius: "var(--radius-md)", padding: "24px", marginTop: "16px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "28px", borderBottom: "1px solid var(--border-color)", paddingBottom: "20px" }}>
+                    <div>
+                        <Skeleton width="220px" height="26px" style={{ marginBottom: "8px" }} />
+                        <Skeleton width="140px" height="14px" style={{ marginBottom: "4px" }} />
+                        <Skeleton width="180px" height="14px" />
+                    </div>
+                    <div style={{ textAlign: "right", display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
+                        <Skeleton width="90px" height="24px" borderRadius="12px" style={{ marginBottom: "8px" }} />
+                        <Skeleton width="160px" height="18px" style={{ marginBottom: "4px" }} />
+                        <Skeleton width="120px" height="14px" />
+                    </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "28px" }}>
+                    <div style={{ padding: "16px", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)" }}>
+                        <Skeleton width="90px" height="13px" style={{ marginBottom: "12px" }} />
+                        <Skeleton width="180px" height="16px" style={{ marginBottom: "8px" }} />
+                        <Skeleton width="220px" height="13px" style={{ marginBottom: "4px" }} />
+                        <Skeleton width="160px" height="13px" />
+                    </div>
+                    <div style={{ padding: "16px", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)" }}>
+                        <Skeleton width="90px" height="13px" style={{ marginBottom: "12px" }} />
+                        <Skeleton width="180px" height="16px" style={{ marginBottom: "8px" }} />
+                        <Skeleton width="220px" height="13px" style={{ marginBottom: "4px" }} />
+                        <Skeleton width="160px" height="13px" />
+                    </div>
+                </div>
+
+                <div style={{ marginBottom: "28px" }}>
+                    <SkeletonTable rows={4} columns={6} />
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <div style={{ width: "320px", padding: "16px", border: "1px solid var(--border-color)", borderRadius: "var(--radius-sm)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                            <Skeleton width="90px" height="14px" />
+                            <Skeleton width="70px" height="14px" />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                            <Skeleton width="80px" height="14px" />
+                            <Skeleton width="60px" height="14px" />
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", paddingTop: "8px", borderTop: "1px solid var(--border-color)" }}>
+                            <Skeleton width="100px" height="18px" />
+                            <Skeleton width="90px" height="18px" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function InvoiceDetails({ invoiceId, onBack }) {
+    const toast = useToast();
     const [invoice, setInvoice] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [actionLoading, setActionLoading] = useState(false);
+    const [downloadingPdf, setDownloadingPdf] = useState(false);
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: "",
+        message: "",
+        confirmVariant: "danger",
+        onConfirm: null
+    });
 
     // E-Invoice state
     const [eInvoiceCancelModalOpen, setEInvoiceCancelModalOpen] = useState(false);
@@ -58,6 +139,7 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
         loadInvoice();
     }, [invoiceId]);
 
+
     async function loadInvoice() {
         try {
             setLoading(true);
@@ -85,7 +167,9 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
     }
 
     async function handleDownloadPdf() {
+        if (downloadingPdf) return;
         try {
+            setDownloadingPdf(true);
             const blob = await downloadInvoicePdf(invoice.id);
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -95,22 +179,35 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            toast.success(`Invoice #${invoice.invoiceNumber || invoice.id} PDF downloaded.`);
         } catch (err) {
-            alert("Error downloading PDF: " + err.message);
+            toast.error("Error downloading PDF: " + err.message);
+        } finally {
+            setDownloadingPdf(false);
         }
     }
 
-    async function handleIssue() {
-        if (!window.confirm("Issue this invoice? This will lock the invoice number and reduce product inventory.")) return;
-        try {
-            setActionLoading(true);
-            const updated = await issueInvoice(invoice.id);
-            setInvoice(updated);
-        } catch (err) {
-            alert(err.message || "Could not issue invoice");
-        } finally {
-            setActionLoading(false);
-        }
+    function handleIssue() {
+        setConfirmModal({
+            isOpen: true,
+            title: "Issue Tax Invoice?",
+            message: "Issuing this invoice will lock its official sequence number, calculate final statutory tax liability, and adjust stock quantities. This cannot be undone.",
+            confirmVariant: "primary",
+            confirmLabel: "Issue Invoice",
+            onConfirm: async () => {
+                try {
+                    setActionLoading(true);
+                    const updated = await issueInvoice(invoice.id);
+                    setInvoice(updated);
+                    toast.success(`Invoice #${updated.invoiceNumber || invoice.id} issued successfully!`);
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                } catch (err) {
+                    toast.error(err.message || "Could not issue invoice");
+                } finally {
+                    setActionLoading(false);
+                }
+            }
+        });
     }
 
     async function handleMarkSent() {
@@ -118,8 +215,9 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             setActionLoading(true);
             const updated = await markInvoiceAsSent(invoice.id);
             setInvoice(updated);
+            toast.success("Invoice marked as sent to customer.");
         } catch (err) {
-            alert(err.message || "Could not mark as sent");
+            toast.error(err.message || "Could not mark as sent");
         } finally {
             setActionLoading(false);
         }
@@ -129,12 +227,12 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
         e.preventDefault();
         const amt = parseFloat(payAmount);
         if (!amt || amt <= 0) {
-            alert("Please enter a valid positive payment amount");
+            toast.warning("Please enter a valid positive payment amount");
             return;
         }
         const bal = Number(invoice.balanceAmount != null ? invoice.balanceAmount : invoice.grandTotal);
         if (amt > bal) {
-            alert(`Payment amount (${formatCurrency(amt)}) cannot exceed balance due (${formatCurrency(bal)})`);
+            toast.warning(`Payment amount (${formatCurrency(amt)}) cannot exceed balance due (${formatCurrency(bal)})`);
             return;
         }
 
@@ -155,8 +253,9 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             setPayAmount("");
             setPayRef("");
             await loadInvoice();
+            toast.success(`Payment of ${formatCurrency(amt)} recorded successfully!`);
         } catch (err) {
-            alert(err.message || "Failed to record payment");
+            toast.error(err.message || "Failed to record payment");
         } finally {
             setActionLoading(false);
         }
@@ -167,9 +266,9 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             setActionLoading(true);
             await generateEInvoice(invoice.id);
             await loadInvoice();
-            alert("Statutory E-Invoice (IRN) generated successfully!");
+            toast.success("Statutory E-Invoice (IRN) generated successfully!");
         } catch (err) {
-            alert(err.message || "Failed to generate E-Invoice");
+            toast.error(err.message || "Failed to generate E-Invoice");
         } finally {
             setActionLoading(false);
         }
@@ -182,9 +281,9 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             await cancelEInvoice(invoice.id, cancelReason, cancelRemarks);
             setEInvoiceCancelModalOpen(false);
             await loadInvoice();
-            alert("Statutory E-Invoice cancelled successfully.");
+            toast.success("Statutory E-Invoice cancelled successfully.");
         } catch (err) {
-            alert(err.message || "Failed to cancel E-Invoice");
+            toast.error(err.message || "Failed to cancel E-Invoice");
         } finally {
             setActionLoading(false);
         }
@@ -203,24 +302,24 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             });
             setEwayModalOpen(false);
             await loadInvoice();
-            alert("E-Way Bill generated successfully!");
+            toast.success("E-Way Bill generated successfully!");
         } catch (err) {
-            alert(err.message || "Failed to generate E-Way Bill");
+            toast.error(err.message || "Failed to generate E-Way Bill");
         } finally {
             setActionLoading(false);
         }
     }
 
     async function handleCancelEWayBill(ewbId) {
-        const reason = prompt("Enter E-Way Bill cancellation reason (e.g. Order Cancelled, Data Error):", "Order Cancelled");
+        const reason = window.prompt("Enter E-Way Bill cancellation reason (e.g. Order Cancelled, Data Error):", "Order Cancelled");
         if (!reason) return;
         try {
             setActionLoading(true);
             await cancelEWayBill(invoice.id, ewbId, "1", reason);
             await loadInvoice();
-            alert("E-Way Bill cancelled successfully.");
+            toast.success("E-Way Bill cancelled successfully.");
         } catch (err) {
-            alert(err.message || "Failed to cancel E-Way Bill");
+            toast.error(err.message || "Failed to cancel E-Way Bill");
         } finally {
             setActionLoading(false);
         }
@@ -237,23 +336,35 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            toast.success(`Receipt ${payment.receiptNumber || payment.id} downloaded.`);
         } catch (err) {
-            alert("Error downloading receipt PDF: " + err.message);
+            toast.error("Error downloading receipt PDF: " + err.message);
         }
     }
 
-    async function handleCancel() {
-        if (!window.confirm("Are you sure you want to CANCEL this invoice? This will reverse any stock adjustments.")) return;
-        try {
-            setActionLoading(true);
-            const updated = await cancelInvoice(invoice.id);
-            setInvoice(updated);
-        } catch (err) {
-            alert(err.message || "Could not cancel invoice");
-        } finally {
-            setActionLoading(false);
-        }
+    function handleCancel() {
+        setConfirmModal({
+            isOpen: true,
+            title: "Cancel Tax Invoice?",
+            message: "Are you sure you want to cancel this invoice? This will reverse any product inventory adjustments and mark the invoice as CANCELLED.",
+            confirmVariant: "danger",
+            confirmLabel: "Cancel Invoice",
+            onConfirm: async () => {
+                try {
+                    setActionLoading(true);
+                    const updated = await cancelInvoice(invoice.id);
+                    setInvoice(updated);
+                    toast.success("Invoice cancelled successfully.");
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                } catch (err) {
+                    toast.error(err.message || "Could not cancel invoice");
+                } finally {
+                    setActionLoading(false);
+                }
+            }
+        });
     }
+
 
     // Open reminder modal and fetch preformatted details
     async function handleOpenReminder() {
@@ -326,20 +437,18 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
     }
 
     if (loading) {
-        return (
-            <div className="empty-state">
-                <p>Loading invoice details...</p>
-            </div>
-        );
+        return <InvoiceDetailsSkeleton onBack={onBack} />;
     }
 
     if (error || !invoice) {
         return (
-            <div className="empty-state">
-                <p style={{ color: "var(--danger)" }}>{error || "Invoice not found"}</p>
-                <button type="button" className="secondary-button" onClick={onBack} style={{ marginTop: "16px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                    <Icon type="arrowLeft" size={14} /> Back to Invoices
-                </button>
+            <div className="invoice-view-container" style={{ padding: "32px 0" }}>
+                <ErrorState
+                    title="Invoice Details Unavailable"
+                    message={error || "The requested invoice could not be found or you do not have permission to view it."}
+                    onRetry={loadInvoice}
+                    secondaryAction={{ label: "Back to Invoices", onClick: onBack }}
+                />
             </div>
         );
     }
@@ -366,11 +475,22 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                 <div className="invoice-top-nav-actions">
                     <button
                         type="button"
-                        className="btn-utility"
+                        className={`btn-utility ${downloadingPdf ? "btn-loading" : ""}`}
                         onClick={handleDownloadPdf}
+                        disabled={downloadingPdf || actionLoading}
                         title="Download official PDF invoice"
                     >
-                        <Icon type="download" size={14} /> Download PDF
+                        {downloadingPdf ? (
+                            <>
+                                <span className="inline-spinner" />
+                                <span>Generating PDF...</span>
+                            </>
+                        ) : (
+                            <>
+                                <Icon type="download" size={14} />
+                                <span>Download PDF</span>
+                            </>
+                        )}
                     </button>
 
                     {invoice.status !== "CANCELLED" && invoice.status !== "PAID" && (
@@ -1206,6 +1326,17 @@ export default function InvoiceDetails({ invoiceId, onBack }) {
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmLabel={confirmModal.confirmLabel}
+                confirmVariant={confirmModal.confirmVariant}
+                isLoading={actionLoading}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+            />
         </div>
     );
 }

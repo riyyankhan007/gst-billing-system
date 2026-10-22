@@ -11,14 +11,74 @@ import {
     updateUserRole,
     getAssetUrl
 } from "../services/api";
+import { Skeleton, SkeletonTable } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import { useToast } from "../context/ToastContext";
+
+function BusinessSettingsSkeleton() {
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div className="page-heading">
+                <div>
+                    <Skeleton width="140px" height="12px" style={{ marginBottom: "6px" }} />
+                    <Skeleton width="280px" height="28px" style={{ marginBottom: "8px" }} />
+                    <Skeleton width="420px" height="14px" />
+                </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px", borderBottom: "1px solid var(--border)", paddingBottom: "8px" }}>
+                <Skeleton width="130px" height="36px" borderRadius="6px" />
+                <Skeleton width="140px" height="36px" borderRadius="6px" />
+                <Skeleton width="180px" height="36px" borderRadius="6px" />
+                <Skeleton width="120px" height="36px" borderRadius="6px" />
+                <Skeleton width="90px" height="36px" borderRadius="6px" />
+            </div>
+            <div className="card" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "18px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <Skeleton width="180px" height="22px" />
+                    <Skeleton width="110px" height="36px" borderRadius="6px" />
+                </div>
+                <div style={{ display: "flex", gap: "20px", alignItems: "center", paddingBottom: "16px", borderBottom: "1px solid var(--border)" }}>
+                    <Skeleton width="90px" height="90px" borderRadius="8px" />
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        <Skeleton width="110px" height="32px" borderRadius="6px" />
+                        <Skeleton width="160px" height="12px" />
+                    </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div>
+                        <Skeleton width="120px" height="12px" style={{ marginBottom: "6px" }} />
+                        <Skeleton height="38px" borderRadius="6px" />
+                    </div>
+                    <div>
+                        <Skeleton width="100px" height="12px" style={{ marginBottom: "6px" }} />
+                        <Skeleton height="38px" borderRadius="6px" />
+                    </div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div>
+                        <Skeleton width="110px" height="12px" style={{ marginBottom: "6px" }} />
+                        <Skeleton height="38px" borderRadius="6px" />
+                    </div>
+                    <div>
+                        <Skeleton width="80px" height="12px" style={{ marginBottom: "6px" }} />
+                        <Skeleton height="38px" borderRadius="6px" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function BusinessSettings() {
+    const toast = useToast();
     const [tab, setTab] = useState("profile"); // profile, bank, invoice, team, security
     const [business, setBusiness] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
     const [saving, setSaving] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
     const [uploadingSig, setUploadingSig] = useState(false);
-    const [message, setMessage] = useState({ text: "", type: "" });
 
     // Team state
     const [users, setUsers] = useState([]);
@@ -40,12 +100,25 @@ export default function BusinessSettings() {
         loadTeam();
     }, []);
 
+    useEffect(() => {
+        const handleBizSwitch = () => {
+            loadBusiness();
+            loadTeam();
+        };
+        window.addEventListener("business-switched", handleBizSwitch);
+        return () => window.removeEventListener("business-switched", handleBizSwitch);
+    }, []);
+
     async function loadBusiness() {
         try {
+            setLoading(true);
+            setError("");
             const data = await getBusiness();
             setBusiness(data);
         } catch (err) {
-            setMessage({ text: err.message || "Failed to load business profile", type: "error" });
+            setError(err.message || "Failed to load business profile");
+        } finally {
+            setLoading(false);
         }
     }
 
@@ -71,10 +144,9 @@ export default function BusinessSettings() {
     const handleSaveBusiness = async e => {
         e.preventDefault();
         setSaving(true);
-        setMessage({ text: "", type: "" });
 
         if (!business.name?.trim()) {
-            setMessage({ text: "Business Name is required (*)", type: "error" });
+            toast.error("Business Name is required (*)");
             setSaving(false);
             return;
         }
@@ -86,10 +158,9 @@ export default function BusinessSettings() {
             };
             const updated = await updateBusiness(payload);
             setBusiness(updated);
-            setMessage({ text: "Business settings saved successfully!", type: "success" });
-            setTimeout(() => setMessage({ text: "", type: "" }), 4000);
+            toast.success("Business settings saved successfully");
         } catch (err) {
-            setMessage({ text: err.message || "Could not save business details", type: "error" });
+            toast.error(err.message || "Could not save business details");
         } finally {
             setSaving(false);
         }
@@ -100,14 +171,13 @@ export default function BusinessSettings() {
         if (!file) return;
 
         setUploadingLogo(true);
-        setMessage({ text: "", type: "" });
 
         try {
             const updated = await uploadLogo(file);
             setBusiness(updated);
-            setMessage({ text: "Logo updated successfully!", type: "success" });
+            toast.success("Logo updated successfully");
         } catch (err) {
-            setMessage({ text: err.message || "Could not upload logo", type: "error" });
+            toast.error(err.message || "Could not upload logo");
         } finally {
             setUploadingLogo(false);
         }
@@ -118,14 +188,13 @@ export default function BusinessSettings() {
         if (!file) return;
 
         setUploadingSig(true);
-        setMessage({ text: "", type: "" });
 
         try {
             const updated = await uploadSignature(file);
             setBusiness(updated);
-            setMessage({ text: "Signature / Stamp updated successfully!", type: "success" });
+            toast.success("Signature / Stamp updated successfully");
         } catch (err) {
-            setMessage({ text: err.message || "Could not upload signature", type: "error" });
+            toast.error(err.message || "Could not upload signature");
         } finally {
             setUploadingSig(false);
         }
@@ -145,11 +214,10 @@ export default function BusinessSettings() {
             setNewUserName("");
             setNewUserEmail("");
             setNewUserPassword("");
-            setMessage({ text: "Team member added successfully!", type: "success" });
-            setTimeout(() => setMessage({ text: "", type: "" }), 4000);
+            toast.success("Team member added successfully");
             await loadTeam();
         } catch (err) {
-            alert(err.message || "Failed to add team member");
+            toast.error(err.message || "Failed to add team member");
         } finally {
             setInviteSubmitting(false);
         }
@@ -158,11 +226,10 @@ export default function BusinessSettings() {
     const handleRoleChange = async (userId, newRole) => {
         try {
             await updateUserRole(userId, newRole);
-            setMessage({ text: "Role updated successfully!", type: "success" });
-            setTimeout(() => setMessage({ text: "", type: "" }), 4000);
+            toast.success("Role updated successfully");
             await loadTeam();
         } catch (err) {
-            alert(err.message || "Failed to update role");
+            toast.error(err.message || "Failed to update role");
         }
     };
 
@@ -192,6 +259,7 @@ export default function BusinessSettings() {
                 currentPassword: pwForm.currentPassword,
                 newPassword: pwForm.newPassword
             });
+            toast.success("Password changed successfully");
             setPwMessage({ text: "Password changed successfully!", type: "success" });
             setPwForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
         } catch (err) {
@@ -201,13 +269,25 @@ export default function BusinessSettings() {
         }
     };
 
-    if (!business) {
+    if (error && !business) {
         return (
-            <div className="card" style={{ padding: "40px", textAlign: "center" }}>
-                <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                <p>Loading business profile...</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div className="page-heading">
+                    <div>
+                        <span className="eyebrow">ADMINISTRATION & CONFIG</span>
+                        <h1>Business & SaaS Settings</h1>
+                    </div>
+                </div>
+                <ErrorState
+                    message={error}
+                    onRetry={loadBusiness}
+                />
             </div>
         );
+    }
+
+    if (loading && !business) {
+        return <BusinessSettingsSkeleton />;
     }
 
     return (
@@ -220,24 +300,8 @@ export default function BusinessSettings() {
                 </div>
             </div>
 
-            {message.text && (
-                <div style={{
-                    padding: "12px 16px",
-                    borderRadius: "8px",
-                    background: message.type === "success" ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
-                    color: message.type === "success" ? "#065f46" : "var(--danger)",
-                    fontWeight: "600",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px"
-                }}>
-                    <Icon type={message.type === "success" ? "checkCircle" : "xCircle"} size={16} color={message.type === "success" ? "#065f46" : "var(--danger)"} />
-                    <span>{message.text}</span>
-                </div>
-            )}
-
             {/* Sub-navigation tabs */}
-            <div style={{ display: "flex", gap: "10px", borderBottom: "1px solid var(--border)", paddingBottom: "8px", flexWrap: "wrap" }}>
+            <div className="settings-tabs" style={{ display: "flex", gap: "10px", borderBottom: "1px solid var(--border)", paddingBottom: "8px" }}>
                 <button
                     className={`btn ${tab === "profile" ? "btn-primary" : "btn-secondary"}`}
                     onClick={() => setTab("profile")}
@@ -275,8 +339,9 @@ export default function BusinessSettings() {
                 <form onSubmit={handleSaveBusiness} className="card" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "18px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
                         <h3 style={{ margin: 0, fontSize: "18px" }}>Company Information</h3>
-                        <button type="submit" className="btn btn-primary" disabled={saving}>
-                            {saving ? "Saving..." : "Save Profile"}
+                        <button type="submit" className={`btn btn-primary ${saving ? "btn-loading" : ""}`} disabled={saving}>
+                            {saving && <span className="inline-spinner" />}
+                            <span>{saving ? "Saving..." : "Save Profile"}</span>
                         </button>
                     </div>
 
@@ -290,15 +355,16 @@ export default function BusinessSettings() {
                             )}
                         </div>
                         <div>
-                            <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
-                                {uploadingLogo ? "Uploading..." : "Upload Logo"}
-                                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: "none" }} />
+                            <label className={`btn btn-secondary btn-sm ${uploadingLogo ? "btn-loading" : ""}`} style={{ cursor: "pointer" }}>
+                                {uploadingLogo && <span className="inline-spinner" />}
+                                <span>{uploadingLogo ? "Uploading..." : "Upload Logo"}</span>
+                                <input type="file" accept="image/*" onChange={handleLogoUpload} style={{ display: "none" }} disabled={uploadingLogo} />
                             </label>
                             <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>PNG, JPG or WEBP (Max 2MB)</div>
                         </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div className="settings-form-grid-2">
                         <div>
                             <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
                                 Business / Company Name *
@@ -328,7 +394,7 @@ export default function BusinessSettings() {
                         </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div className="settings-form-grid-2">
                         <div>
                             <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
                                 PAN Number (10-digit)
@@ -358,7 +424,7 @@ export default function BusinessSettings() {
                         </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                    <div className="settings-form-grid-3">
                         <div>
                             <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
                                 State Code
@@ -432,15 +498,16 @@ export default function BusinessSettings() {
                 <form onSubmit={handleSaveBusiness} className="card" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "18px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <h3 style={{ margin: 0, fontSize: "18px" }}>Bank & UPI Payment Details</h3>
-                        <button type="submit" className="btn btn-primary" disabled={saving}>
-                            {saving ? "Saving..." : "Save Bank Details"}
+                        <button type="submit" className={`btn btn-primary ${saving ? "btn-loading" : ""}`} disabled={saving}>
+                            {saving && <span className="inline-spinner" />}
+                            <span>{saving ? "Saving..." : "Save Bank Details"}</span>
                         </button>
                     </div>
                     <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)" }}>
                         These details are printed automatically on PDF invoices so clients can pay via NEFT/IMPS or UPI QR.
                     </p>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div className="settings-form-grid-2">
                         <div>
                             <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
                                 Bank Name
@@ -469,7 +536,7 @@ export default function BusinessSettings() {
                         </div>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                    <div className="settings-form-grid-2">
                         <div>
                             <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
                                 IFSC Code (11 characters)
@@ -510,9 +577,10 @@ export default function BusinessSettings() {
                                     <span style={{ fontSize: "11px", color: "var(--muted)" }}>No Stamp</span>
                                 )}
                             </div>
-                            <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
-                                {uploadingSig ? "Uploading..." : "Upload Stamp / Signature"}
-                                <input type="file" accept="image/*" onChange={handleSignatureUpload} style={{ display: "none" }} />
+                            <label className={`btn btn-secondary btn-sm ${uploadingSig ? "btn-loading" : ""}`} style={{ cursor: "pointer" }}>
+                                {uploadingSig && <span className="inline-spinner" />}
+                                <span>{uploadingSig ? "Uploading..." : "Upload Stamp / Signature"}</span>
+                                <input type="file" accept="image/*" onChange={handleSignatureUpload} style={{ display: "none" }} disabled={uploadingSig} />
                             </label>
                         </div>
                     </div>
@@ -524,12 +592,13 @@ export default function BusinessSettings() {
                 <form onSubmit={handleSaveBusiness} className="card" style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "18px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <h3 style={{ margin: 0, fontSize: "18px" }}>Invoice Numbering & Default Terms</h3>
-                        <button type="submit" className="btn btn-primary" disabled={saving}>
-                            {saving ? "Saving..." : "Save Settings"}
+                        <button type="submit" className={`btn btn-primary ${saving ? "btn-loading" : ""}`} disabled={saving}>
+                            {saving && <span className="inline-spinner" />}
+                            <span>{saving ? "Saving..." : "Save Settings"}</span>
                         </button>
                     </div>
 
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" }}>
+                    <div className="settings-form-grid-3">
                         <div>
                             <label style={{ display: "block", fontSize: "13px", fontWeight: "600", marginBottom: "4px" }}>
                                 Invoice Prefix *
@@ -612,45 +681,56 @@ export default function BusinessSettings() {
                     </div>
 
                     {teamLoading ? (
-                        <p>Loading users...</p>
+                        <SkeletonTable rows={4} columns={4} />
+                    ) : users.length === 0 ? (
+                        <EmptyState
+                            icon="user"
+                            title="No team members yet"
+                            message="Invite accountants or sales staff to collaborate on this business."
+                            actionLabel="Add Team Member"
+                            actionIcon="plus"
+                            onAction={() => setShowInviteModal(true)}
+                        />
                     ) : (
-                        <table className="table" style={{ width: "100%", margin: 0 }}>
-                            <thead>
-                                <tr>
-                                    <th>Name</th>
-                                    <th>Email</th>
-                                    <th>Role</th>
-                                    <th>Permissions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {users.map(u => (
-                                    <tr key={u.id}>
-                                        <td style={{ fontWeight: "600" }}>{u.name}</td>
-                                        <td>{u.email}</td>
-                                        <td>
-                                            <select
-                                                className="input"
-                                                style={{ maxWidth: "160px", padding: "4px 8px", fontSize: "13px" }}
-                                                value={u.role}
-                                                onChange={e => handleRoleChange(u.id, e.target.value)}
-                                            >
-                                                <option value="ADMIN">ADMIN</option>
-                                                <option value="ACCOUNTANT">ACCOUNTANT</option>
-                                                <option value="SALES">SALES</option>
-                                                <option value="VIEWER">VIEWER</option>
-                                            </select>
-                                        </td>
-                                        <td style={{ fontSize: "12px", color: "var(--muted)" }}>
-                                            {u.role === "ADMIN" && "Full administrative control"}
-                                            {u.role === "ACCOUNTANT" && "Invoices, Payments, Reports, Purchases"}
-                                            {u.role === "SALES" && "Customers, Invoices, Products"}
-                                            {u.role === "VIEWER" && "Read-only analytics access"}
-                                        </td>
+                        <div className="table-container">
+                            <table className="table" style={{ width: "100%", margin: 0 }}>
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Permissions</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody>
+                                    {users.map(u => (
+                                        <tr key={u.id}>
+                                            <td style={{ fontWeight: "600" }}>{u.name}</td>
+                                            <td>{u.email}</td>
+                                            <td>
+                                                <select
+                                                    className="input"
+                                                    style={{ maxWidth: "160px", padding: "4px 8px", fontSize: "13px" }}
+                                                    value={u.role}
+                                                    onChange={e => handleRoleChange(u.id, e.target.value)}
+                                                >
+                                                    <option value="ADMIN">ADMIN</option>
+                                                    <option value="ACCOUNTANT">ACCOUNTANT</option>
+                                                    <option value="SALES">SALES</option>
+                                                    <option value="VIEWER">VIEWER</option>
+                                                </select>
+                                            </td>
+                                            <td style={{ fontSize: "12px", color: "var(--muted)" }}>
+                                                {u.role === "ADMIN" && "Full administrative control"}
+                                                {u.role === "ACCOUNTANT" && "Invoices, Payments, Reports, Purchases"}
+                                                {u.role === "SALES" && "Customers, Invoices, Products"}
+                                                {u.role === "VIEWER" && "Read-only analytics access"}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
 
                     {/* Invite Modal */}
@@ -720,8 +800,9 @@ export default function BusinessSettings() {
                                         <button type="button" className="btn btn-secondary" onClick={() => setShowInviteModal(false)}>
                                             Cancel
                                         </button>
-                                        <button type="submit" className="btn btn-primary" disabled={inviteSubmitting}>
-                                            {inviteSubmitting ? "Adding..." : "Add Member"}
+                                        <button type="submit" className={`btn btn-primary ${inviteSubmitting ? "btn-loading" : ""}`} disabled={inviteSubmitting}>
+                                            {inviteSubmitting && <span className="inline-spinner" />}
+                                            <span>{inviteSubmitting ? "Adding..." : "Add Member"}</span>
                                         </button>
                                     </div>
                                 </form>
@@ -787,8 +868,9 @@ export default function BusinessSettings() {
                         />
                     </div>
 
-                    <button type="submit" className="btn btn-primary" disabled={pwLoading} style={{ alignSelf: "flex-start" }}>
-                        {pwLoading ? "Updating..." : "Update Password"}
+                    <button type="submit" className={`btn btn-primary ${pwLoading ? "btn-loading" : ""}`} disabled={pwLoading} style={{ alignSelf: "flex-start" }}>
+                        {pwLoading && <span className="inline-spinner" />}
+                        <span>{pwLoading ? "Updating..." : "Update Password"}</span>
                     </button>
                 </form>
             )}

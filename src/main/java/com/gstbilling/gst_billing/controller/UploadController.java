@@ -23,8 +23,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Controller to securely serve uploaded branding assets (logos, signatures, stamps)
- * from persistent Cloudflare R2 storage or local disk with strict path traversal protection.
+ * Controller to securely serve uploaded assets from persistent Cloudflare R2 storage or local disk.
+ * Enforces strict authentication and multi-tenant authorization for private documents
+ * (such as signatures, invoice PDFs, and customer files) while permitting public branding logos.
  */
 @RestController
 @RequestMapping("/uploads")
@@ -49,24 +50,42 @@ public class UploadController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid file name");
         }
 
-        // Multi-tenant check: if file is prefixed with business-{id}-, verify caller matches tenant when context is present
+        boolean isPrivateDocument = isPrivateAsset(filename);
+        Long callerTenantId = TenantContext.getTenantId();
+
+        // Multi-tenant authorization check
         Matcher matcher = BIZ_PATTERN.matcher(filename);
         if (matcher.matches()) {
             try {
                 Long fileBizId = Long.parseLong(matcher.group(1));
-                Long callerTenantId = TenantContext.getTenantId();
-                if (callerTenantId != null && !callerTenantId.equals(fileBizId)) {
+
+                // Private files (signatures, private PDFs, records) require authentication and matching tenant
+                if (isPrivateDocument) {
+                    if (callerTenantId == null) {
+                        throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required to access private document");
+                    }
+                    if (!callerTenantId.equals(fileBizId)) {
+                        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: file belongs to another business");
+                    }
+                } else if (callerTenantId != null && !callerTenantId.equals(fileBizId)) {
+                    // Even for non-private files with tenant prefix, prevent cross-tenant enumeration if authenticated
                     throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access denied: file belongs to another business");
                 }
             } catch (NumberFormatException ignored) {}
+        } else if (isPrivateDocument && callerTenantId == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Authentication required to access private document");
         }
 
         MediaType mediaType = determineMediaType(filename);
+        String cacheControl = isPrivateDocument
+                ? "private, no-cache, no-store, must-revalidate"
+                : "public, max-age=86400";
 
-        // 1. Try retrieving from primary persistent storage (R2 / StorageService)
+        // 1. Try retrieving from persistent storage (Cloudflare R2 / StorageService)
         String[] candidateKeys = new String[]{
-                "logos/" + filename,
                 "signatures/" + filename,
+                "logos/" + filename,
+                "invoices/" + filename,
                 "uploads/" + filename,
                 filename
         };
@@ -77,7 +96,7 @@ public class UploadController {
                     byte[] bytes = storageService.retrieve(key);
                     if (bytes != null && bytes.length > 0) {
                         return ResponseEntity.ok()
-                                .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                                .header(HttpHeaders.CACHE_CONTROL, cacheControl)
                                 .contentType(mediaType)
                                 .body(new ByteArrayResource(bytes));
                     }
@@ -85,16 +104,26 @@ public class UploadController {
             } catch (Exception ignored) {}
         }
 
-        // 2. Fallback to local disk for legacy files prior to Cloudflare R2 migration
+        // 2. Fallback to local disk for local development/test environments
         Path target = baseDirectory.resolve(filename).normalize();
         if (target.startsWith(baseDirectory) && Files.exists(target) && Files.isRegularFile(target)) {
             return ResponseEntity.ok()
-                    .header(HttpHeaders.CACHE_CONTROL, "public, max-age=86400")
+                    .header(HttpHeaders.CACHE_CONTROL, cacheControl)
                     .contentType(mediaType)
                     .body(new FileSystemResource(target));
         }
 
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "File not found: " + filename);
+    }
+
+    private boolean isPrivateAsset(String filename) {
+        String lower = filename.toLowerCase();
+        return lower.contains("signature") ||
+                lower.contains("invoice") ||
+                lower.contains("statement") ||
+                lower.contains("debit") ||
+                lower.contains("credit") ||
+                lower.endsWith(".pdf");
     }
 
     private MediaType determineMediaType(String filename) {

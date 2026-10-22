@@ -66,11 +66,20 @@ public class CreditNote {
     @Column(name = "status", nullable = false)
     private String status = "ISSUED"; // ISSUED, CANCELLED
 
+    @Column(name = "financial_year")
+    private String financialYear;
+
+    @Column(name = "created_by")
+    private String createdBy;
+
     @Column(name = "notes")
     private String notes;
 
     @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt;
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 
     public CreditNote() {
         this.createdAt = LocalDateTime.now();
@@ -210,5 +219,29 @@ public class CreditNote {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getFinancialYear() {
+        return financialYear;
+    }
+
+    public void setFinancialYear(String financialYear) {
+        this.financialYear = financialYear;
+    }
+
+    public String getCreatedBy() {
+        return createdBy;
+    }
+
+    public void setCreatedBy(String createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public LocalDateTime getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
     }
 }

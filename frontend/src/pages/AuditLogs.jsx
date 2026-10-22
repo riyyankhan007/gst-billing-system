@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import Icon from "../components/Icon";
 import { getAuditLogs } from "../services/api";
+import { SkeletonTable } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
 
 export default function AuditLogs() {
     const [logs, setLogs] = useState([]);
@@ -12,6 +15,14 @@ export default function AuditLogs() {
 
     useEffect(() => {
         loadLogs();
+    }, []);
+
+    useEffect(() => {
+        const handleBizSwitch = () => {
+            loadLogs();
+        };
+        window.addEventListener("business-switched", handleBizSwitch);
+        return () => window.removeEventListener("business-switched", handleBizSwitch);
     }, []);
 
     async function loadLogs() {
@@ -26,6 +37,8 @@ export default function AuditLogs() {
             setLoading(false);
         }
     }
+
+    const isFiltered = search !== "" || actionFilter !== "ALL" || entityFilter !== "ALL";
 
     const filtered = logs.filter(l => {
         if (actionFilter !== "ALL") {
@@ -109,22 +122,38 @@ export default function AuditLogs() {
                     <h1>System Audit Logs</h1>
                     <p>Tamper-evident traceability trail of user actions, invoice issuances, and tenant operations</p>
                 </div>
-                <button type="button" className="action-btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }} onClick={loadLogs}>
-                    <Icon type="refresh" size={13} /> Refresh Logs
-                </button>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    {loading && logs.length > 0 && (
+                        <span className="refresh-indicator">
+                            <span className="inline-spinner" style={{ width: "12px", height: "12px" }} />
+                            <span>Updating...</span>
+                        </span>
+                    )}
+                    <button
+                        type="button"
+                        className={`action-btn-sm ${loading ? "btn-loading" : ""}`}
+                        style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+                        onClick={loadLogs}
+                        disabled={loading}
+                    >
+                        {loading ? <span className="inline-spinner" /> : <Icon type="refresh" size={13} />}
+                        <span>Refresh Logs</span>
+                    </button>
+                </div>
             </div>
 
             {error && (
-                <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.12)", color: "var(--danger)", borderRadius: "var(--radius-sm)", border: "1px solid #fecaca", fontWeight: 500 }}>
-                    {error}
-                </div>
+                <ErrorState
+                    message={error}
+                    onRetry={loadLogs}
+                />
             )}
 
             {/* Audit Logs Table Card */}
             <div className="table-card">
                 <div className="table-header-card">
                     <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", flex: 1, alignItems: "center" }}>
-                        <div className="search-input-wrapper" style={{ minWidth: "260px", maxWidth: "400px", flex: 1 }}>
+                        <div className="search-input-wrapper" style={{ maxWidth: "400px", flex: 1 }}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <circle cx="11" cy="11" r="8" />
                                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -180,15 +209,17 @@ export default function AuditLogs() {
                 </div>
 
                 <div className="table-container">
-                    {loading ? (
-                        <div style={{ padding: "40px", textAlign: "center" }}>
-                            <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                            <p>Loading audit trail...</p>
-                        </div>
+                    {loading && logs.length === 0 ? (
+                        <SkeletonTable rows={8} columns={8} />
                     ) : filtered.length === 0 ? (
-                        <div style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)" }}>
-                            <p>No audit log events found matching filters.</p>
-                        </div>
+                        <EmptyState
+                            icon="shield"
+                            title={isFiltered ? "No audit log events match filters" : "No audit logs recorded"}
+                            message={isFiltered ? "No audit events matched your search query or filter criteria." : "Audit events will automatically appear here as team members perform business actions."}
+                            actionLabel={isFiltered ? "Clear Filters" : undefined}
+                            actionIcon={isFiltered ? "close" : undefined}
+                            onAction={isFiltered ? () => { setSearch(""); setActionFilter("ALL"); setEntityFilter("ALL"); } : undefined}
+                        />
                     ) : (
                         <table className="table">
                             <thead>

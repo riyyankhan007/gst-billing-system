@@ -74,11 +74,34 @@ public class AuthRateLimitingFilter extends OncePerRequestFilter {
     }
 
     private String getClientIp(HttpServletRequest request) {
+        // 1. Cloudflare proxy header (most trustworthy when deployed behind Cloudflare)
+        String cfIp = request.getHeader("CF-Connecting-IP");
+        if (cfIp != null && !cfIp.isBlank() && isValidIp(cfIp.trim())) {
+            return cfIp.trim();
+        }
+
+        // 2. Standard X-Real-IP header from Nginx/Render reverse proxy
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank() && isValidIp(realIp.trim())) {
+            return realIp.trim();
+        }
+
+        // 3. Fallback to first sanitized entry in X-Forwarded-For
         String xf = request.getHeader("X-Forwarded-For");
         if (xf != null && !xf.isBlank()) {
-            return xf.split(",")[0].trim();
+            String first = xf.split(",")[0].trim();
+            if (isValidIp(first)) {
+                return first;
+            }
         }
+
         return request.getRemoteAddr() != null ? request.getRemoteAddr() : "unknown";
+    }
+
+    private boolean isValidIp(String ip) {
+        if (ip == null || ip.length() > 45) return false;
+        // Simple regex check for IPv4 or IPv6 format
+        return ip.matches("^[0-9a-fA-F.:]+$");
     }
 
     private void cleanupIfNecessary() {

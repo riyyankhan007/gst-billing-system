@@ -15,12 +15,15 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class AuthService {
 
     private final UserRepository users;
     private final BusinessRepository businesses;
+    private final com.gstbilling.gst_billing.repository.BusinessMembershipRepository membershipRepository;
+    private final com.gstbilling.gst_billing.repository.WarehouseRepository warehouseRepository;
     private final PasswordEncoder encoder;
     private final JwtService jwt;
     private final EmailService emailService;
@@ -30,6 +33,8 @@ public class AuthService {
     public AuthService(
             UserRepository users,
             BusinessRepository businesses,
+            com.gstbilling.gst_billing.repository.BusinessMembershipRepository membershipRepository,
+            com.gstbilling.gst_billing.repository.WarehouseRepository warehouseRepository,
             PasswordEncoder encoder,
             JwtService jwt,
             EmailService emailService,
@@ -38,6 +43,8 @@ public class AuthService {
     ) {
         this.users = users;
         this.businesses = businesses;
+        this.membershipRepository = membershipRepository;
+        this.warehouseRepository = warehouseRepository;
         this.encoder = encoder;
         this.jwt = jwt;
         this.emailService = emailService;
@@ -57,6 +64,18 @@ public class AuthService {
         business.setInvoicePrefix("INV");
         businesses.save(business);
 
+        // Create default warehouse for this business
+        com.gstbilling.gst_billing.entity.Warehouse defaultWarehouse = new com.gstbilling.gst_billing.entity.Warehouse(
+                business,
+                "Main Warehouse",
+                "MAIN",
+                business.getAddress(),
+                business.getState(),
+                business.getStateCode(),
+                true
+        );
+        warehouseRepository.save(defaultWarehouse);
+
         User user = new User();
         user.setName(request.name().trim());
         user.setEmail(cleanEmail);
@@ -64,6 +83,16 @@ public class AuthService {
         user.setBusiness(business);
         user.setUserRole(UserRole.OWNER);
         users.save(user);
+
+        // Create business membership for the owner
+        com.gstbilling.gst_billing.entity.BusinessMembership membership = new com.gstbilling.gst_billing.entity.BusinessMembership(
+                user,
+                business,
+                UserRole.OWNER,
+                "ACTIVE",
+                null
+        );
+        membershipRepository.save(membership);
 
         return response(user);
     }
@@ -108,6 +137,16 @@ public class AuthService {
             user.setFailedLoginAttempts(0);
             user.setLockedUntil(null);
             users.save(user);
+        }
+
+        if (user.getBusiness() == null) {
+            List<com.gstbilling.gst_billing.entity.BusinessMembership> mems = membershipRepository.findActiveMembershipsByUserId(user.getId());
+            if (!mems.isEmpty()) {
+                com.gstbilling.gst_billing.entity.BusinessMembership primary = mems.get(0);
+                user.setBusiness(primary.getBusiness());
+                user.setUserRole(primary.getRole());
+                users.save(user);
+            }
         }
 
         return response(user);

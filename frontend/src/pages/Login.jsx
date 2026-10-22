@@ -253,11 +253,12 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
 
                         <button
                             type="submit"
-                            className="primary-button"
+                            className={`primary-button ${loading ? "btn-loading" : ""}`}
                             style={{ width: "100%", marginTop: "8px" }}
                             disabled={loading}
                         >
-                            {loading ? "Signing in..." : "Sign In to Workspace"}
+                            {loading && <span className="inline-spinner" />}
+                            <span>{loading ? "Signing in..." : "Sign In to Workspace"}</span>
                         </button>
                     </form>
                 )}
@@ -326,11 +327,12 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
 
                         <button
                             type="submit"
-                            className="primary-button"
+                            className={`primary-button ${loading ? "btn-loading" : ""}`}
                             style={{ width: "100%", marginTop: "8px" }}
                             disabled={loading}
                         >
-                            {loading ? "Creating Account..." : "Create Business Account"}
+                            {loading && <span className="inline-spinner" />}
+                            <span>{loading ? "Creating Account..." : "Create Business Account"}</span>
                         </button>
                     </form>
                 )}
@@ -356,11 +358,12 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
 
                         <button
                             type="submit"
-                            className="primary-button"
+                            className={`primary-button ${loading ? "btn-loading" : ""}`}
                             style={{ width: "100%", marginTop: "12px" }}
                             disabled={loading}
                         >
-                            {loading ? "Sending Code..." : "Send Reset Code"}
+                            {loading && <span className="inline-spinner" />}
+                            <span>{loading ? "Sending Code..." : "Send Reset Code"}</span>
                         </button>
 
                         <div className="auth-footer-links">
@@ -436,11 +439,12 @@ export default function Login({ onAuthenticated, onBackToHome, initialMode = "lo
 
                         <button
                             type="submit"
-                            className="primary-button"
+                            className={`primary-button ${loading ? "btn-loading" : ""}`}
                             style={{ width: "100%", marginTop: "12px" }}
                             disabled={loading}
                         >
-                            {loading ? "Updating Password..." : "Reset Password & Login"}
+                            {loading && <span className="inline-spinner" />}
+                            <span>{loading ? "Updating Password..." : "Reset Password & Login"}</span>
                         </button>
 
                         <div className="auth-footer-links">
