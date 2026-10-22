@@ -22,7 +22,7 @@ public class User {
     private String password;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "business_id", nullable = false)
+    @JoinColumn(name = "business_id")
     @JsonIgnore
     private Business business;
 
