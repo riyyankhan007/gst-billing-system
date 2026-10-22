@@ -9,6 +9,7 @@ import com.gstbilling.gst_billing.entity.WarehouseStock;
 import com.gstbilling.gst_billing.repository.ProductRepository;
 import com.gstbilling.gst_billing.repository.StockMovementRepository;
 import com.gstbilling.gst_billing.repository.WarehouseStockRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +37,7 @@ public class ProductService {
         this(productRepository, currentUserService, hsnSacCodeRepository, null, null, null);
     }
 
+    @Autowired
     public ProductService(
             ProductRepository productRepository,
             CurrentUserService currentUserService,

@@ -2,6 +2,7 @@ package com.gstbilling.gst_billing.service;
 
 import com.gstbilling.gst_billing.entity.*;
 import com.gstbilling.gst_billing.repository.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ public class PurchaseService {
         this(purchaseRepository, supplierRepository, productRepository, stockMovementRepository, currentUserService, null, null);
     }
 
+    @Autowired
     public PurchaseService(PurchaseRepository purchaseRepository,
                            SupplierRepository supplierRepository,
                            ProductRepository productRepository,
