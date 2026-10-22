@@ -28,6 +28,8 @@ public class InvoiceService {
     private final EmailService emailService;
     private final AuditLogService auditLogService;
     private final InvoiceSequenceService invoiceSequenceService;
+    private final WarehouseService warehouseService;
+    private final com.gstbilling.gst_billing.repository.WarehouseRepository warehouseRepository;
 
     public InvoiceService(
             InvoiceRepository invoiceRepository,
@@ -39,7 +41,9 @@ public class InvoiceService {
             GstCalculationService gstCalculationService,
             EmailService emailService,
             AuditLogService auditLogService,
-            InvoiceSequenceService invoiceSequenceService
+            InvoiceSequenceService invoiceSequenceService,
+            WarehouseService warehouseService,
+            com.gstbilling.gst_billing.repository.WarehouseRepository warehouseRepository
     ) {
         this.invoiceRepository = invoiceRepository;
         this.productRepository = productRepository;
@@ -51,11 +55,13 @@ public class InvoiceService {
         this.emailService = emailService;
         this.auditLogService = auditLogService;
         this.invoiceSequenceService = invoiceSequenceService;
+        this.warehouseService = warehouseService;
+        this.warehouseRepository = warehouseRepository;
     }
 
     @Transactional
     public Invoice createInvoice(Invoice invoice) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
 
         // Lock business to ensure consistent state
         Business business = businessRepository.findByIdForUpdate(businessId)
@@ -78,6 +84,16 @@ public class InvoiceService {
         }
 
         invoice.setBusiness(business);
+
+        // Resolve Warehouse for stock allocation
+        com.gstbilling.gst_billing.entity.Warehouse warehouse = null;
+        if (invoice.getWarehouseId() != null) {
+            warehouse = warehouseRepository.findByIdAndBusiness_Id(invoice.getWarehouseId(), businessId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Selected warehouse not found: " + invoice.getWarehouseId()));
+        } else {
+            warehouse = warehouseService.getOrCreateDefaultWarehouse(business);
+        }
+        invoice.setWarehouse(warehouse);
 
         // Fetch and validate customer
         Customer customer = customerRepository.findByIdAndBusinessId(invoice.getCustomerId(), businessId)
@@ -231,28 +247,16 @@ public class InvoiceService {
 
     private void applyStockReduction(Invoice invoice, Business business) {
         if (invoice.getItems() == null) return;
+        com.gstbilling.gst_billing.entity.Warehouse warehouse = invoice.getWarehouse() != null
+                ? invoice.getWarehouse()
+                : warehouseService.getOrCreateDefaultWarehouse(business);
 
         for (InvoiceItem item : invoice.getItems()) {
             if (item.getProductId() != null) {
                 Product prod = productRepository.findByIdAndBusinessId(item.getProductId(), business.getId()).orElse(null);
                 if (prod != null && !"SERVICE".equalsIgnoreCase(prod.getProductType())) {
-                    BigDecimal before = prod.getStockQuantity() != null ? prod.getStockQuantity() : BigDecimal.ZERO;
                     BigDecimal qty = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ONE;
-                    BigDecimal after = before.subtract(qty);
-                    prod.setStockQuantity(after);
-                    productRepository.save(prod);
-
-                    StockMovement movement = new StockMovement(
-                            business,
-                            prod,
-                            "INVOICE",
-                            qty.negate(),
-                            before,
-                            after,
-                            invoice.getInvoiceNumber(),
-                            "Deducted for issued invoice #" + invoice.getInvoiceNumber()
-                    );
-                    stockMovementRepository.save(movement);
+                    warehouseService.deductInvoiceStock(warehouse, prod, qty, invoice.getInvoiceNumber());
                 }
             }
         }
@@ -260,28 +264,16 @@ public class InvoiceService {
 
     private void reverseStockReduction(Invoice invoice, Business business) {
         if (invoice.getItems() == null) return;
+        com.gstbilling.gst_billing.entity.Warehouse warehouse = invoice.getWarehouse() != null
+                ? invoice.getWarehouse()
+                : warehouseService.getOrCreateDefaultWarehouse(business);
 
         for (InvoiceItem item : invoice.getItems()) {
             if (item.getProductId() != null) {
                 Product prod = productRepository.findByIdAndBusinessId(item.getProductId(), business.getId()).orElse(null);
                 if (prod != null && !"SERVICE".equalsIgnoreCase(prod.getProductType())) {
-                    BigDecimal before = prod.getStockQuantity() != null ? prod.getStockQuantity() : BigDecimal.ZERO;
                     BigDecimal qty = item.getQuantity() != null ? item.getQuantity() : BigDecimal.ONE;
-                    BigDecimal after = before.add(qty);
-                    prod.setStockQuantity(after);
-                    productRepository.save(prod);
-
-                    StockMovement movement = new StockMovement(
-                            business,
-                            prod,
-                            "INVOICE_CANCELLED",
-                            qty,
-                            before,
-                            after,
-                            invoice.getInvoiceNumber(),
-                            "Stock restored on cancellation of invoice #" + invoice.getInvoiceNumber()
-                    );
-                    stockMovementRepository.save(movement);
+                    warehouseService.reverseInvoiceStock(warehouse, prod, qty, invoice.getInvoiceNumber());
                 }
             }
         }
@@ -352,6 +344,12 @@ public class InvoiceService {
             existing.setTermsAndConditions(updatedInvoice.getTermsAndConditions());
         }
 
+        if (updatedInvoice.getWarehouseId() != null) {
+            com.gstbilling.gst_billing.entity.Warehouse warehouse = warehouseRepository.findByIdAndBusiness_Id(updatedInvoice.getWarehouseId(), business.getId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Selected warehouse not found"));
+            existing.setWarehouse(warehouse);
+        }
+
         if (updatedInvoice.getItems() != null && !updatedInvoice.getItems().isEmpty()) {
             existing.getItems().clear();
             for (InvoiceItem item : updatedInvoice.getItems()) {
@@ -370,7 +368,7 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public List<Invoice> getAllInvoices() {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         List<Invoice> invoices = invoiceRepository.findByBusiness_IdOrderByInvoiceDateDescIdDesc(businessId);
         invoices.forEach(inv -> {
             checkAndUpdateOverdue(inv);
@@ -381,7 +379,7 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public List<Invoice> searchInvoices(String status, Long customerId) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         List<Invoice> invoices = invoiceRepository.searchInvoices(businessId, status, customerId);
         invoices.forEach(inv -> {
             checkAndUpdateOverdue(inv);
@@ -392,7 +390,7 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public Invoice getInvoiceById(Long id) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         Invoice invoice = invoiceRepository.findByIdAndBusiness_Id(id, businessId)
                 .orElseThrow(() ->
                         new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found or not available to this business")

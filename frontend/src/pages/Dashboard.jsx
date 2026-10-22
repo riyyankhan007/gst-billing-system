@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import Icon from "../components/Icon";
 import { getAnalytics, getDashboardMetrics } from "../services/api";
+import { getChartTooltipPosition, calculateTaxPercentages } from "../utils/chartTooltip";
+import { Skeleton, SkeletonKpi, SkeletonTable } from "../components/ui/Skeleton";
+import ErrorState from "../components/ui/ErrorState";
 
 export default function Dashboard({ onNavigate, onSelectInvoice }) {
     const [range, setRange] = useState("MONTH");
@@ -28,6 +31,14 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
     useEffect(() => {
         loadAnalyticsData();
     }, [range]);
+
+    useEffect(() => {
+        const handleBizSwitch = () => {
+            loadAnalyticsData();
+        };
+        window.addEventListener("business-switched", handleBizSwitch);
+        return () => window.removeEventListener("business-switched", handleBizSwitch);
+    }, [range, customStart, customEnd]);
 
     async function loadAnalyticsData() {
         try {
@@ -86,25 +97,70 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
 
     if (loading && !data) {
         return (
-            <div className="card loading-state" style={{ padding: "60px 20px", textAlign: "center" }}>
-                <div className="spinner" style={{ margin: "0 auto 16px" }} />
-                <h3 style={{ fontSize: "16px", color: "var(--text-primary)", fontWeight: 600 }}>Loading Business Analytics</h3>
-                <p style={{ color: "var(--text-muted)", fontSize: "13px" }}>Aggregating multi-tenant GST data, sales records, and ledger balances...</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }} aria-busy="true">
+                <div className="analytics-header">
+                    <div>
+                        <Skeleton width="130px" height="12px" style={{ marginBottom: "8px" }} />
+                        <Skeleton width="260px" height="28px" style={{ marginBottom: "8px" }} />
+                        <Skeleton width="420px" height="14px" />
+                    </div>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                        <Skeleton width="280px" height="36px" borderRadius="var(--radius-sm, 6px)" />
+                    </div>
+                </div>
+
+                <div className="analytics-kpi-grid">
+                    <SkeletonKpi stripeColor="#2563eb" />
+                    <SkeletonKpi stripeColor="#8b5cf6" />
+                    <SkeletonKpi stripeColor="#10b981" />
+                    <SkeletonKpi stripeColor="#ef4444" />
+                </div>
+
+                <div className="dashboard-charts-grid">
+                    <div className="chart-card" style={{ padding: "20px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
+                            <Skeleton width="180px" height="18px" />
+                            <Skeleton width="90px" height="14px" />
+                        </div>
+                        <Skeleton width="100%" height="220px" borderRadius="8px" />
+                    </div>
+                    <div className="chart-card" style={{ padding: "20px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "16px" }}>
+                            <Skeleton width="180px" height="18px" />
+                            <Skeleton width="90px" height="14px" />
+                        </div>
+                        <Skeleton width="100%" height="220px" borderRadius="8px" />
+                    </div>
+                </div>
+
+                <div className="dashboard-leaderboards-grid">
+                    <div className="table-card" style={{ padding: "18px 20px" }}>
+                        <Skeleton width="180px" height="18px" style={{ marginBottom: "14px" }} />
+                        <SkeletonTable columns={3} rows={4} showHeader={false} />
+                    </div>
+                    <div className="table-card" style={{ padding: "18px 20px" }}>
+                        <Skeleton width="180px" height="18px" style={{ marginBottom: "14px" }} />
+                        <SkeletonTable columns={3} rows={4} showHeader={false} />
+                    </div>
+                    <div className="table-card" style={{ padding: "18px 20px" }}>
+                        <Skeleton width="180px" height="18px" style={{ marginBottom: "14px" }} />
+                        <SkeletonTable columns={3} rows={4} showHeader={false} />
+                    </div>
+                </div>
             </div>
         );
     }
 
     if (error && !data) {
         return (
-            <div className="card" style={{ padding: "32px", textAlign: "center", border: "1px solid var(--danger)" }}>
-                <h3 style={{ color: "var(--danger)", marginBottom: "8px" }}>Error Loading Analytics</h3>
-                <p style={{ color: "var(--text-secondary)", marginBottom: "16px" }}>{error}</p>
-                <button className="primary-button" onClick={loadAnalyticsData}>
-                    Retry
-                </button>
-            </div>
+            <ErrorState
+                title="Failed to load analytics dashboard"
+                message={error}
+                onRetry={loadAnalyticsData}
+            />
         );
     }
+
 
     const sales = data?.sales || data?.salesSummary || {};
     const gst = data?.gst || data?.gstSummary || {};
@@ -160,13 +216,30 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
             <div className="analytics-header">
                 <div>
                     <span className="eyebrow">ENTERPRISE PERFORMANCE</span>
-                    <h1 style={{ margin: "2px 0 6px", fontSize: "24px", fontWeight: "800", color: "var(--text-primary)", letterSpacing: "-0.5px" }}>
-                        Business Analytics
-                    </h1>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                        <h1 style={{ margin: "2px 0 6px", fontSize: "24px", fontWeight: "800", color: "var(--text-primary)", letterSpacing: "-0.5px" }}>
+                            Business Analytics
+                        </h1>
+                        {loading && data && (
+                            <span className="refresh-indicator">
+                                <span
+                                    className="inline-spinner"
+                                    style={{
+                                        width: "10px",
+                                        height: "10px",
+                                        border: "2px solid #2563eb",
+                                        borderTopColor: "transparent"
+                                    }}
+                                />
+                                Updating...
+                            </span>
+                        )}
+                    </div>
                     <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "13.5px" }}>
                         Real-time tenant isolated revenue tracking, GST tax liability, receivables, and customer metrics.
                     </p>
                 </div>
+
 
                 {/* Date-range filters */}
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
@@ -288,7 +361,7 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
             </div>
 
             {/* Charts Row: Sales Trend + GST Trend */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: "20px" }}>
+            <div className="dashboard-charts-grid">
                 {/* 1. Sales Trend Area Chart */}
                 <div className="chart-card">
                     <div className="chart-header">
@@ -304,21 +377,40 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                     </div>
 
                     <div className="chart-container-rel">
-                        {hoverSales && (
-                            <div
-                                className="chart-tooltip"
-                                style={{
-                                    left: `${(hoverSales.x / svgWidth) * 100}%`,
-                                    top: `${(hoverSales.y / svgHeight) * 100}%`
-                                }}
-                            >
-                                <div style={{ fontWeight: 700, marginBottom: "2px" }}>{formatTrendDate(hoverSales.date)}</div>
-                                <div>Sales: <strong style={{ color: "#93c5fd" }}>{fmt(hoverSales.sales)}</strong></div>
-                                <div style={{ fontSize: "11px", color: "#94a3b8" }}>Invoices: {hoverSales.invoiceCount}</div>
-                            </div>
-                        )}
+                        {hoverSales && (() => {
+                            const { xPct, yPct, className } = getChartTooltipPosition(
+                                hoverSales.x,
+                                hoverSales.y,
+                                svgWidth,
+                                svgHeight
+                            );
 
-                        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="chart-svg">
+                            return (
+                                <div
+                                    className={className}
+                                    style={{
+                                        left: `${xPct}%`,
+                                        top: `${yPct}%`
+                                    }}
+                                    role="tooltip"
+                                    aria-hidden="false"
+                                >
+                                    <div style={{ fontWeight: 700, marginBottom: "4px", fontSize: "12px", borderBottom: "1px solid rgba(255, 255, 255, 0.14)", paddingBottom: "4px" }}>
+                                        {formatTrendDate(hoverSales.date)}
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", fontSize: "11.5px" }}>
+                                        <span style={{ color: "#94a3b8" }}>Turnover:</span>
+                                        <strong style={{ color: "#93c5fd" }}>{fmt(hoverSales.sales)}</strong>
+                                    </div>
+                                    <div style={{ display: "flex", justifyContent: "space-between", gap: "12px", fontSize: "11px", color: "#cbd5e1", marginTop: "2px" }}>
+                                        <span>Invoices:</span>
+                                        <strong style={{ color: "#ffffff" }}>{hoverSales.invoiceCount ?? 0}</strong>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="chart-svg" onMouseLeave={() => setHoverSales(null)}>
                             <defs>
                                 <linearGradient id="salesGrad" x1="0%" y1="0%" x2="0%" y2="100%">
                                     <stop offset="0%" stopColor="#2563eb" stopOpacity="0.28" />
@@ -375,20 +467,34 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                                 />
                             )}
 
-                            {/* Interactive Data Points */}
+                            {/* Interactive Data Points with larger touch target & keyboard accessibility */}
                             {salesPoints.map((pt, i) => (
-                                <circle
-                                    key={i}
-                                    cx={pt.x}
-                                    cy={pt.y}
-                                    r={hoverSales?.date === pt.date ? 6 : 4}
-                                    fill="#ffffff"
-                                    stroke="#2563eb"
-                                    strokeWidth="2.5"
-                                    className="chart-data-point"
-                                    onMouseEnter={() => setHoverSales(pt)}
-                                    onMouseLeave={() => setHoverSales(null)}
-                                />
+                                <g key={i}>
+                                    <circle
+                                        cx={pt.x}
+                                        cy={pt.y}
+                                        r={16}
+                                        fill="transparent"
+                                        style={{ cursor: "pointer", outline: "none" }}
+                                        tabIndex={0}
+                                        role="button"
+                                        aria-label={`Sales for ${pt.date}: ${fmt(pt.sales)}, ${pt.invoiceCount || 0} invoices`}
+                                        onMouseEnter={() => setHoverSales(pt)}
+                                        onFocus={() => setHoverSales(pt)}
+                                        onBlur={() => setHoverSales(null)}
+                                        onClick={() => setHoverSales(prev => prev?.date === pt.date ? null : pt)}
+                                    />
+                                    <circle
+                                        cx={pt.x}
+                                        cy={pt.y}
+                                        r={hoverSales?.date === pt.date ? 6 : 4}
+                                        fill="#ffffff"
+                                        stroke="#2563eb"
+                                        strokeWidth="2.5"
+                                        className="chart-data-point"
+                                        style={{ pointerEvents: "none" }}
+                                    />
+                                </g>
                             ))}
 
                             {/* X-axis Date Labels */}
@@ -432,23 +538,78 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                     </div>
 
                     <div className="chart-container-rel">
-                        {hoverGst && (
-                            <div
-                                className="chart-tooltip"
-                                style={{
-                                    left: `${(hoverGst.x / svgWidth) * 100}%`,
-                                    top: `${(hoverGst.y / svgHeight) * 100}%`
-                                }}
-                            >
-                                <div style={{ fontWeight: 700, marginBottom: "2px" }}>{formatTrendDate(hoverGst.item.date)}</div>
-                                <div>Total Tax: <strong>{fmt(hoverGst.item.totalGst ?? hoverGst.item.totalTax)}</strong></div>
-                                <div style={{ fontSize: "11px", color: "#c7d2fe" }}>CGST: {fmt(hoverGst.item.cgst)}</div>
-                                <div style={{ fontSize: "11px", color: "#e9d5ff" }}>SGST: {fmt(hoverGst.item.sgst)}</div>
-                                <div style={{ fontSize: "11px", color: "#fbcfe8" }}>IGST: {fmt(hoverGst.item.igst)}</div>
-                            </div>
-                        )}
+                        {hoverGst && (() => {
+                            const { xPct, yPct, className } = getChartTooltipPosition(
+                                hoverGst.x,
+                                hoverGst.y,
+                                svgWidth,
+                                svgHeight
+                            );
 
-                        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="chart-svg">
+                            const itemTotal = Number(hoverGst.item.totalGst ?? hoverGst.item.totalTax ?? 0);
+                            const cgstVal = Number(hoverGst.item.cgst || 0);
+                            const sgstVal = Number(hoverGst.item.sgst || 0);
+                            const igstVal = Number(hoverGst.item.igst || 0);
+                            const { cgstPct, sgstPct, igstPct } = calculateTaxPercentages(cgstVal, sgstVal, igstVal, itemTotal);
+
+                            return (
+                                <div
+                                    className={className}
+                                    style={{
+                                        left: `${xPct}%`,
+                                        top: `${yPct}%`
+                                    }}
+                                    role="tooltip"
+                                    aria-hidden="false"
+                                >
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "14px", marginBottom: "6px", borderBottom: "1px solid rgba(255, 255, 255, 0.14)", paddingBottom: "5px" }}>
+                                        <span style={{ fontWeight: 700, fontSize: "12px", color: "#f8fafc" }}>
+                                            {formatTrendDate(hoverGst.item.date)}
+                                        </span>
+                                        <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+                                            Total: <strong style={{ color: "#ffffff", fontSize: "12px" }}>{fmt(itemTotal)}</strong>
+                                        </span>
+                                    </div>
+
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                                        {/* CGST */}
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", fontSize: "11.5px" }}>
+                                            <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#c7d2fe" }}>
+                                                <span style={{ width: "8px", height: "8px", borderRadius: "2px", backgroundColor: "#4f46e5", display: "inline-block", flexShrink: 0 }} />
+                                                <span>CGST ({cgstPct}%)</span>
+                                            </span>
+                                            <span style={{ fontWeight: 600, color: "#ffffff", fontFamily: "var(--font-mono, monospace)", fontSize: "11px" }}>
+                                                {fmt(cgstVal)}
+                                            </span>
+                                        </div>
+
+                                        {/* SGST */}
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", fontSize: "11.5px" }}>
+                                            <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#e9d5ff" }}>
+                                                <span style={{ width: "8px", height: "8px", borderRadius: "2px", backgroundColor: "#9333ea", display: "inline-block", flexShrink: 0 }} />
+                                                <span>SGST ({sgstPct}%)</span>
+                                            </span>
+                                            <span style={{ fontWeight: 600, color: "#ffffff", fontFamily: "var(--font-mono, monospace)", fontSize: "11px" }}>
+                                                {fmt(sgstVal)}
+                                            </span>
+                                        </div>
+
+                                        {/* IGST */}
+                                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", fontSize: "11.5px" }}>
+                                            <span style={{ display: "flex", alignItems: "center", gap: "6px", color: "#fbcfe8" }}>
+                                                <span style={{ width: "8px", height: "8px", borderRadius: "2px", backgroundColor: "#ec4899", display: "inline-block", flexShrink: 0 }} />
+                                                <span>IGST ({igstPct}%)</span>
+                                            </span>
+                                            <span style={{ fontWeight: 600, color: "#ffffff", fontFamily: "var(--font-mono, monospace)", fontSize: "11px" }}>
+                                                {fmt(igstVal)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
+                        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="chart-svg" onMouseLeave={() => setHoverGst(null)}>
                             {/* Horizontal Gridlines */}
                             {[0, 0.25, 0.5, 0.75, 1].map((pct, idx) => {
                                 const yPos = paddingTop + plotHeight * (1 - pct);
@@ -497,18 +658,39 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                                 const igstY = sgstY - igstH;
 
                                 const itemTotal = Number(d.totalGst ?? d.totalTax ?? (cgstVal + sgstVal + igstVal));
+                                const totalBarH = cgstH + sgstH + igstH;
+                                const barTopY = totalBarH > 0 ? igstY : baseY - 10;
+                                const isHovered = hoverGst?.item?.date === d.date;
 
                                 return (
-                                    <g
-                                        key={i}
-                                        className="chart-bar"
-                                        onMouseEnter={() => setHoverGst({
-                                            x: xCenter,
-                                            y: Math.max(paddingTop, Math.min(igstY, baseY - 20)),
-                                            item: { ...d, totalTax: itemTotal, totalGst: itemTotal, cgst: cgstVal, sgst: sgstVal, igst: igstVal }
-                                        })}
-                                        onMouseLeave={() => setHoverGst(null)}
-                                    >
+                                    <g key={i} className="chart-bar-group">
+                                        {/* Column hover highlight */}
+                                        {isHovered && (
+                                            <rect
+                                                x={paddingLeft + i * barGroupWidth + 1}
+                                                y={paddingTop}
+                                                width={Math.max(1, barGroupWidth - 2)}
+                                                height={plotHeight}
+                                                fill="#f1f5f9"
+                                                opacity="0.75"
+                                                rx="4"
+                                                style={{ pointerEvents: "none" }}
+                                            />
+                                        )}
+
+                                        {/* Baseline indicator for 0 liability */}
+                                        {totalBarH === 0 && (
+                                            <rect
+                                                x={x}
+                                                y={baseY - 2}
+                                                width={barW}
+                                                height={2}
+                                                fill="#cbd5e1"
+                                                rx="1"
+                                                style={{ pointerEvents: "none" }}
+                                            />
+                                        )}
+
                                         {/* CGST */}
                                         {cgstH > 0 && (
                                             <rect
@@ -518,8 +700,10 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                                                 height={cgstH}
                                                 fill="#4f46e5"
                                                 rx={sgstH === 0 && igstH === 0 ? "3" : "0"}
+                                                style={{ pointerEvents: "none" }}
                                             />
                                         )}
+
                                         {/* SGST */}
                                         {sgstH > 0 && (
                                             <rect
@@ -529,8 +713,10 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                                                 height={sgstH}
                                                 fill="#9333ea"
                                                 rx={igstH === 0 ? "3" : "0"}
+                                                style={{ pointerEvents: "none" }}
                                             />
                                         )}
+
                                         {/* IGST */}
                                         {igstH > 0 && (
                                             <rect
@@ -540,8 +726,38 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                                                 height={igstH}
                                                 fill="#ec4899"
                                                 rx="3"
+                                                style={{ pointerEvents: "none" }}
                                             />
                                         )}
+
+                                        {/* Accessible full-column interactive hit area */}
+                                        <rect
+                                            x={paddingLeft + i * barGroupWidth}
+                                            y={paddingTop}
+                                            width={barGroupWidth}
+                                            height={plotHeight}
+                                            fill="transparent"
+                                            style={{ cursor: "pointer", outline: "none" }}
+                                            tabIndex={0}
+                                            role="button"
+                                            aria-label={`GST for ${d.date}: Total ${fmt(itemTotal)}, CGST ${fmt(cgstVal)}, SGST ${fmt(sgstVal)}, IGST ${fmt(igstVal)}`}
+                                            onMouseEnter={() => setHoverGst({
+                                                x: xCenter,
+                                                y: barTopY,
+                                                item: { ...d, totalTax: itemTotal, totalGst: itemTotal, cgst: cgstVal, sgst: sgstVal, igst: igstVal }
+                                            })}
+                                            onFocus={() => setHoverGst({
+                                                x: xCenter,
+                                                y: barTopY,
+                                                item: { ...d, totalTax: itemTotal, totalGst: itemTotal, cgst: cgstVal, sgst: sgstVal, igst: igstVal }
+                                            })}
+                                            onBlur={() => setHoverGst(null)}
+                                            onClick={() => setHoverGst(prev => prev?.item?.date === d.date ? null : {
+                                                x: xCenter,
+                                                y: barTopY,
+                                                item: { ...d, totalTax: itemTotal, totalGst: itemTotal, cgst: cgstVal, sgst: sgstVal, igst: igstVal }
+                                            })}
+                                        />
                                     </g>
                                 );
                             })}
@@ -549,17 +765,18 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
                             {/* X-axis Labels */}
                             {gstTrend.length > 0 &&
                                 gstTrend
-                                    .filter((_, idx) => {
+                                    .map((d, origIdx) => ({ d, origIdx }))
+                                    .filter(({ origIdx }) => {
                                         if (gstTrend.length <= 8) return true;
                                         const step = Math.ceil(gstTrend.length / 7);
-                                        return idx % step === 0 || idx === gstTrend.length - 1;
+                                        return origIdx % step === 0 || origIdx === gstTrend.length - 1;
                                     })
-                                    .map((d, idx) => {
+                                    .map(({ d, origIdx }) => {
                                         const barGroupWidth = plotWidth / (gstTrend.length || 1);
-                                        const xCenter = paddingLeft + (idx + 0.5) * barGroupWidth;
+                                        const xCenter = paddingLeft + (origIdx + 0.5) * barGroupWidth;
                                         return (
                                             <text
-                                                key={idx}
+                                                key={origIdx}
                                                 x={xCenter}
                                                 y={svgHeight - 10}
                                                 textAnchor="middle"
@@ -576,7 +793,7 @@ export default function Dashboard({ onNavigate, onSelectInvoice }) {
             </div>
 
             {/* Leaderboards: Top Customers & Top Products */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: "20px" }}>
+            <div className="dashboard-leaderboards-grid">
                 {/* 1. Top Customers */}
                 <div className="card" style={{ padding: "22px" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>

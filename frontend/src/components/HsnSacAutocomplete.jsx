@@ -199,7 +199,7 @@ export default function HsnSacAutocomplete({
             {/* Validation Message / Error Alert */}
             {validationError && (
                 <div style={{ fontSize: "11px", color: "var(--danger)", marginTop: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
-                    <span>⚠</span>
+                    <Icon type="alert" size={13} color="var(--danger)" />
                     <span>{validationError}</span>
                 </div>
             )}

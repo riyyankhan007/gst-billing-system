@@ -49,7 +49,6 @@ public class GstCalculationService {
             boolean reverseCharge,
             BigDecimal roundOffAmount
     ) {
-        // Compatibility constructor for existing callers
         public GstResult(
                 BigDecimal taxableAmount,
                 BigDecimal cgst,
@@ -87,9 +86,9 @@ public class GstCalculationService {
             throw new IllegalArgumentException("Invoice must have at least one line item");
         }
 
-        BigDecimal sumTaxable = BigDecimal.ZERO;
-        BigDecimal sumTotalTax = BigDecimal.ZERO;
-        List<ItemOutput> calculatedItems = new ArrayList<>();
+        // Pass 1: Validate lines and calculate unadjusted base taxable values per item
+        List<BigDecimal> rawLineTaxables = new ArrayList<>(itemInputs.size());
+        BigDecimal totalRawTaxable = BigDecimal.ZERO;
 
         for (ItemInput item : itemInputs) {
             BigDecimal qty = (item.quantity() != null) ? item.quantity() : BigDecimal.ONE;
@@ -107,36 +106,83 @@ public class GstCalculationService {
                 throw new IllegalArgumentException("GST rate cannot be negative: " + gstRate);
             }
 
-            BigDecimal discount = item.discount() != null ? item.discount() : BigDecimal.ZERO;
-            if (discount.compareTo(BigDecimal.ZERO) < 0) {
-                throw new IllegalArgumentException("Discount cannot be negative: " + discount);
+            BigDecimal lineDiscount = item.discount() != null ? item.discount() : BigDecimal.ZERO;
+            if (lineDiscount.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalArgumentException("Discount cannot be negative: " + lineDiscount);
             }
 
             BigDecimal lineGross = qty.multiply(price).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal lineAfterDiscount = lineGross.subtract(discount);
+            BigDecimal lineAfterDiscount = lineGross.subtract(lineDiscount);
             if (lineAfterDiscount.compareTo(BigDecimal.ZERO) < 0) {
                 lineAfterDiscount = BigDecimal.ZERO;
             }
 
-            BigDecimal lineTaxable;
-            BigDecimal lineTax;
-            BigDecimal lineTotal;
-
+            BigDecimal rawBaseTaxable;
             if (item.taxInclusive() && gstRate.compareTo(BigDecimal.ZERO) > 0) {
-                // Price already includes GST: taxable = total / (1 + rate/100)
+                // Price includes GST: Base = total / (1 + rate/100)
                 BigDecimal divisor = BigDecimal.ONE.add(gstRate.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
-                lineTaxable = lineAfterDiscount.divide(divisor, 2, RoundingMode.HALF_UP);
-                lineTax = lineAfterDiscount.subtract(lineTaxable).setScale(2, RoundingMode.HALF_UP);
-                lineTotal = lineAfterDiscount;
+                rawBaseTaxable = lineAfterDiscount.divide(divisor, 2, RoundingMode.HALF_UP);
             } else {
-                // Price is tax-exclusive
-                lineTaxable = lineAfterDiscount;
-                lineTax = lineTaxable.multiply(gstRate)
-                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-                lineTotal = lineTaxable.add(lineTax).setScale(2, RoundingMode.HALF_UP);
+                rawBaseTaxable = lineAfterDiscount;
             }
 
-            sumTaxable = sumTaxable.add(lineTaxable);
+            rawLineTaxables.add(rawBaseTaxable);
+            totalRawTaxable = totalRawTaxable.add(rawBaseTaxable);
+        }
+
+        // Pass 2: Allocate invoice-level discount proportionally across lines BEFORE computing taxes
+        BigDecimal totalInvDiscount = (invoiceDiscount != null && invoiceDiscount.compareTo(BigDecimal.ZERO) > 0)
+                ? invoiceDiscount.min(totalRawTaxable)
+                : BigDecimal.ZERO;
+
+        BigDecimal sumTaxable = BigDecimal.ZERO;
+        BigDecimal sumTotalTax = BigDecimal.ZERO;
+        List<ItemOutput> calculatedItems = new ArrayList<>(itemInputs.size());
+        BigDecimal allocatedDiscountSum = BigDecimal.ZERO;
+
+        for (int i = 0; i < itemInputs.size(); i++) {
+            ItemInput item = itemInputs.get(i);
+            BigDecimal rawBase = rawLineTaxables.get(i);
+            BigDecimal gstRate = item.gstRate() != null ? item.gstRate() : BigDecimal.ZERO;
+            BigDecimal lineDiscount = item.discount() != null ? item.discount() : BigDecimal.ZERO;
+            BigDecimal qty = (item.quantity() != null) ? item.quantity() : BigDecimal.ONE;
+            BigDecimal price = item.unitPrice() != null ? item.unitPrice() : BigDecimal.ZERO;
+            BigDecimal lineGross = qty.multiply(price).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal lineAfterDiscount = lineGross.subtract(lineDiscount).max(BigDecimal.ZERO);
+
+            BigDecimal proportionalInvDiscount;
+            if (totalInvDiscount.compareTo(BigDecimal.ZERO) > 0 && totalRawTaxable.compareTo(BigDecimal.ZERO) > 0) {
+                if (i == itemInputs.size() - 1) {
+                    // Last item absorbs any rounding difference to ensure exact total discount allocation
+                    proportionalInvDiscount = totalInvDiscount.subtract(allocatedDiscountSum);
+                } else {
+                    proportionalInvDiscount = totalInvDiscount
+                            .multiply(rawBase)
+                            .divide(totalRawTaxable, 2, RoundingMode.HALF_UP);
+                    allocatedDiscountSum = allocatedDiscountSum.add(proportionalInvDiscount);
+                }
+            } else {
+                proportionalInvDiscount = BigDecimal.ZERO;
+            }
+
+            BigDecimal finalLineTaxable = rawBase.subtract(proportionalInvDiscount);
+            if (finalLineTaxable.compareTo(BigDecimal.ZERO) < 0) {
+                finalLineTaxable = BigDecimal.ZERO;
+            }
+
+            // Calculate GST on post-discount taxable amount
+            BigDecimal lineTax;
+            if (item.taxInclusive() && gstRate.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal netGross = lineAfterDiscount.subtract(proportionalInvDiscount);
+                lineTax = netGross.subtract(finalLineTaxable);
+            } else {
+                lineTax = finalLineTaxable.multiply(gstRate)
+                        .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            }
+
+            BigDecimal lineTotal = finalLineTaxable.add(lineTax).setScale(2, RoundingMode.HALF_UP);
+
+            sumTaxable = sumTaxable.add(finalLineTaxable);
             sumTotalTax = sumTotalTax.add(lineTax);
 
             calculatedItems.add(new ItemOutput(
@@ -146,19 +192,11 @@ public class GstCalculationService {
                     qty,
                     price,
                     gstRate,
-                    discount,
-                    lineTaxable,
+                    lineDiscount.add(proportionalInvDiscount),
+                    finalLineTaxable,
                     lineTax,
                     lineTotal
             ));
-        }
-
-        // Apply invoice-level discount if present
-        if (invoiceDiscount != null && invoiceDiscount.compareTo(BigDecimal.ZERO) > 0) {
-            sumTaxable = sumTaxable.subtract(invoiceDiscount);
-            if (sumTaxable.compareTo(BigDecimal.ZERO) < 0) {
-                sumTaxable = BigDecimal.ZERO;
-            }
         }
 
         boolean isIntraState = false;

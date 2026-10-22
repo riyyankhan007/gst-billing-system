@@ -12,6 +12,17 @@ export function getAssetUrl(path) {
     return `${apiHost}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+let activeSlowCount = 0;
+
+function updateSlowState(delta) {
+    activeSlowCount = Math.max(0, activeSlowCount + delta);
+    if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("api-slow-state", {
+            detail: { isSlow: activeSlowCount > 0 }
+        }));
+    }
+}
+
 async function request(path, options = {}) {
     const headers = {
         ...(options.body instanceof FormData
@@ -31,10 +42,31 @@ async function request(path, options = {}) {
         headers.Authorization = `Bearer ${token()}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-        ...options,
-        headers
-    });
+    // Detect slow cold starts (> 2.5 seconds)
+    let slowTriggered = false;
+    const slowTimer = setTimeout(() => {
+        slowTriggered = true;
+        updateSlowState(1);
+    }, 2500);
+
+    let response;
+    try {
+        response = await fetch(`${API_BASE_URL}${path}`, {
+            ...options,
+            headers
+        });
+    } catch (networkErr) {
+        throw new Error(
+            networkErr.message?.includes("Failed to fetch") || networkErr.name === "TypeError"
+                ? "Unable to connect to the server. Please check your internet connection or verify the service is running."
+                : (networkErr.message || "Network request failed")
+        );
+    } finally {
+        clearTimeout(slowTimer);
+        if (slowTriggered) {
+            updateSlowState(-1);
+        }
+    }
 
     if (!response.ok) {
         let errorMessage = "Request failed";
@@ -63,6 +95,7 @@ async function request(path, options = {}) {
 
 const json = (path, options) =>
     request(path, options).then(r => r.json());
+
 
 // =========================
 // AUTH
@@ -581,4 +614,86 @@ export const importHsnSacCsv = (fileOrText, source = "CBIC_OFFICIAL_IMPORT", ver
         });
     }
 };
+
+// =========================
+// MULTI-BUSINESS & MEMBERSHIPS
+// =========================
+
+export const getUserBusinesses = () =>
+    json("/business/memberships");
+
+export const switchBusiness = (businessId) =>
+    json(`/business/switch/${businessId}`, {
+        method: "POST"
+    });
+
+export const createBusiness = (body) =>
+    json("/business/create", {
+        method: "POST",
+        body: JSON.stringify(body)
+    });
+
+export const getBusinessMembers = () =>
+    json("/business/members");
+
+export const inviteBusinessMember = (body) =>
+    json("/business/members/invite", {
+        method: "POST",
+        body: JSON.stringify(body)
+    });
+
+export const updateBusinessMemberRole = (membershipId, role) =>
+    json(`/business/members/${membershipId}/role`, {
+        method: "PUT",
+        body: JSON.stringify({ role })
+    });
+
+export const removeBusinessMember = (membershipId) =>
+    json(`/business/members/${membershipId}`, {
+        method: "DELETE"
+    });
+
+// =========================
+// MULTI-WAREHOUSE INVENTORY
+// =========================
+
+export const getWarehouses = () =>
+    json("/warehouses");
+
+export const getWarehouse = (id) =>
+    json(`/warehouses/${id}`);
+
+export const createWarehouse = (body) =>
+    json("/warehouses", {
+        method: "POST",
+        body: JSON.stringify(body)
+    });
+
+export const updateWarehouse = (id, body) =>
+    json(`/warehouses/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(body)
+    });
+
+export const getWarehouseStock = (warehouseId) =>
+    json(`/warehouses/${warehouseId}/stock`);
+
+export const recordOpeningStock = (body) =>
+    json("/warehouses/opening-stock", {
+        method: "POST",
+        body: JSON.stringify(body)
+    });
+
+export const transferWarehouseStock = (body) =>
+    json("/warehouses/transfer", {
+        method: "POST",
+        body: JSON.stringify(body)
+    });
+
+export const adjustWarehouseStock = (body) =>
+    json("/warehouses/adjust", {
+        method: "POST",
+        body: JSON.stringify(body)
+    });
+
 

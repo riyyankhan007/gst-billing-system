@@ -18,15 +18,21 @@ public class InvoiceSequenceService {
     private final InvoiceSequenceRepository sequenceRepository;
     private final InvoiceRepository invoiceRepository;
     private final BusinessRepository businessRepository;
+    private final com.gstbilling.gst_billing.repository.CreditNoteRepository creditNoteRepository;
+    private final com.gstbilling.gst_billing.repository.DebitNoteRepository debitNoteRepository;
 
     public InvoiceSequenceService(
             InvoiceSequenceRepository sequenceRepository,
             InvoiceRepository invoiceRepository,
-            BusinessRepository businessRepository
+            BusinessRepository businessRepository,
+            com.gstbilling.gst_billing.repository.CreditNoteRepository creditNoteRepository,
+            com.gstbilling.gst_billing.repository.DebitNoteRepository debitNoteRepository
     ) {
         this.sequenceRepository = sequenceRepository;
         this.invoiceRepository = invoiceRepository;
         this.businessRepository = businessRepository;
+        this.creditNoteRepository = creditNoteRepository;
+        this.debitNoteRepository = debitNoteRepository;
     }
 
     /**
@@ -127,6 +133,11 @@ public class InvoiceSequenceService {
         long candidateSeq = sequence.getCurrentSequence() + 1;
         String formattedNumber = String.format("%s/%s/%04d", prefix, fy, candidateSeq);
 
+        while (creditNoteRepository.existsByBusiness_IdAndCreditNoteNumberIgnoreCase(business.getId(), formattedNumber)) {
+            candidateSeq++;
+            formattedNumber = String.format("%s/%s/%04d", prefix, fy, candidateSeq);
+        }
+
         sequence.setCurrentSequence(candidateSeq);
         sequence.setPrefix(prefix);
         sequence.setUpdatedAt(LocalDateTime.now());
@@ -153,6 +164,11 @@ public class InvoiceSequenceService {
 
         long candidateSeq = sequence.getCurrentSequence() + 1;
         String formattedNumber = String.format("%s/%s/%04d", prefix, fy, candidateSeq);
+
+        while (debitNoteRepository.existsByBusiness_IdAndDebitNoteNumberIgnoreCase(business.getId(), formattedNumber)) {
+            candidateSeq++;
+            formattedNumber = String.format("%s/%s/%04d", prefix, fy, candidateSeq);
+        }
 
         sequence.setCurrentSequence(candidateSeq);
         sequence.setPrefix(prefix);

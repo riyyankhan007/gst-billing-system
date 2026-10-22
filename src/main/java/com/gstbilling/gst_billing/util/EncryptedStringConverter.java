@@ -2,6 +2,8 @@ package com.gstbilling.gst_billing.util;
 
 import jakarta.persistence.AttributeConverter;
 import jakarta.persistence.Converter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -13,47 +15,82 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 
 /**
- * JPA AttributeConverter that transparently encrypts sensitive database fields (like bank accounts)
+ * JPA AttributeConverter that transparently encrypts sensitive database fields (such as bank accounts)
  * using AES-256-GCM authenticated encryption.
- * Backwards compatible with existing plaintext rows.
+ * Supports secure key rotation and backwards-compatible decryption.
  */
 @Converter
 @Component
 public class EncryptedStringConverter implements AttributeConverter<String, String> {
+
+    private static final Logger log = LoggerFactory.getLogger(EncryptedStringConverter.class);
 
     private static final String PREFIX = "ENC:";
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int GCM_TAG_LENGTH = 128;
     private static final int IV_LENGTH = 12;
 
-    private static volatile SecretKey secretKey;
+    private static volatile SecretKey primaryKey;
+    private static final List<SecretKey> legacyKeys = new ArrayList<>();
 
     public EncryptedStringConverter(
             @Value("${app.encryption.secret:}") String encryptionSecret,
-            @Value("${app.jwt.secret:}") String jwtSecret
+            @Value("${app.encryption.legacy-secrets:}") String legacySecrets,
+            @Value("${spring.profiles.active:default}") String activeProfile
     ) {
-        String keySource = (encryptionSecret != null && !encryptionSecret.isBlank())
-                ? encryptionSecret
-                : ((jwtSecret != null && !jwtSecret.isBlank()) ? jwtSecret : "gst-billing-default-fallback-key-32b");
-        try {
-            byte[] keyBytes = MessageDigest.getInstance("SHA-256").digest(keySource.getBytes(StandardCharsets.UTF_8));
-            secretKey = new SecretKeySpec(keyBytes, "AES");
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to initialize encryption key", e);
+        boolean isProduction = "prod".equalsIgnoreCase(activeProfile) ||
+                "production".equalsIgnoreCase(activeProfile) ||
+                System.getenv("RENDER") != null;
+
+        if (encryptionSecret == null || encryptionSecret.trim().length() < 16) {
+            if (isProduction) {
+                String msg = "Production encryption secret APP_ENCRYPTION_SECRET (app.encryption.secret) is required " +
+                        "and must contain at least 16 characters. Startup aborted for financial data integrity.";
+                log.error(msg);
+                throw new IllegalStateException(msg);
+            }
+            log.warn("APP_ENCRYPTION_SECRET not explicitly configured in non-production profile '{}'. " +
+                    "Using local development encryption key.", activeProfile);
+            encryptionSecret = "dev-test-encryption-key-local-only-32b!";
         }
+
+        primaryKey = deriveKey(encryptionSecret.trim());
+
+        // Configure legacy keys for seamless rotation
+        if (legacySecrets != null && !legacySecrets.isBlank()) {
+            for (String secret : legacySecrets.split(",")) {
+                if (!secret.trim().isBlank()) {
+                    legacyKeys.add(deriveKey(secret.trim()));
+                }
+            }
+        }
+        // Always retain fallback key in legacy decryption chain for records written prior to rotation
+        legacyKeys.add(deriveKey("gst-billing-default-fallback-key-32b"));
+    }
+
+    public EncryptedStringConverter(String encryptionSecret, String jwtSecret) {
+        this(encryptionSecret, null, "test");
     }
 
     public EncryptedStringConverter() {
-        // Fallback no-args constructor for JPA provider instantiation
-        if (secretKey == null) {
-            try {
-                byte[] keyBytes = MessageDigest.getInstance("SHA-256")
-                        .digest("gst-billing-default-fallback-key-32b".getBytes(StandardCharsets.UTF_8));
-                secretKey = new SecretKeySpec(keyBytes, "AES");
-            } catch (Exception ignored) {}
+        // No-arg constructor for JPA provider instantiation
+        if (primaryKey == null) {
+            primaryKey = deriveKey("dev-test-encryption-key-local-only-32b!");
+            legacyKeys.add(deriveKey("gst-billing-default-fallback-key-32b"));
+        }
+    }
+
+    private static SecretKey deriveKey(String secret) {
+        try {
+            byte[] keyBytes = MessageDigest.getInstance("SHA-256").digest(secret.getBytes(StandardCharsets.UTF_8));
+            return new SecretKeySpec(keyBytes, "AES");
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to derive AES-256 key", e);
         }
     }
 
@@ -67,7 +104,7 @@ public class EncryptedStringConverter implements AttributeConverter<String, Stri
             new SecureRandom().nextBytes(iv);
 
             Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
+            cipher.init(Cipher.ENCRYPT_MODE, primaryKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
 
             byte[] cipherText = cipher.doFinal(attribute.getBytes(StandardCharsets.UTF_8));
 
@@ -77,7 +114,7 @@ public class EncryptedStringConverter implements AttributeConverter<String, Stri
 
             return PREFIX + Base64.getEncoder().encodeToString(byteBuffer.array());
         } catch (Exception e) {
-            throw new RuntimeException("Error encrypting field", e);
+            throw new RuntimeException("Error encrypting sensitive field", e);
         }
     }
 
@@ -102,13 +139,29 @@ public class EncryptedStringConverter implements AttributeConverter<String, Stri
             byte[] cipherText = new byte[byteBuffer.remaining()];
             byteBuffer.get(cipherText);
 
-            Cipher cipher = Cipher.getInstance(ALGORITHM);
-            cipher.init(Cipher.DECRYPT_MODE, secretKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
-
-            byte[] plainText = cipher.doFinal(cipherText);
-            return new String(plainText, StandardCharsets.UTF_8);
+            // Attempt decryption with primary key first
+            try {
+                Cipher cipher = Cipher.getInstance(ALGORITHM);
+                cipher.init(Cipher.DECRYPT_MODE, primaryKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
+                byte[] plainText = cipher.doFinal(cipherText);
+                return new String(plainText, StandardCharsets.UTF_8);
+            } catch (Exception primaryEx) {
+                // Key rotation fallback: try legacy keys
+                for (SecretKey legacyKey : legacyKeys) {
+                    try {
+                        Cipher cipher = Cipher.getInstance(ALGORITHM);
+                        cipher.init(Cipher.DECRYPT_MODE, legacyKey, new GCMParameterSpec(GCM_TAG_LENGTH, iv));
+                        byte[] plainText = cipher.doFinal(cipherText);
+                        return new String(plainText, StandardCharsets.UTF_8);
+                    } catch (Exception ignored) {
+                        // try next legacy key
+                    }
+                }
+                log.error("Failed to decrypt field with primary key and {} legacy keys", legacyKeys.size());
+                return null;
+            }
         } catch (Exception e) {
-            // In case of tampering or key mismatch, log or return null rather than crash
+            log.error("Corrupt or invalid encrypted payload: {}", e.getMessage());
             return null;
         }
     }

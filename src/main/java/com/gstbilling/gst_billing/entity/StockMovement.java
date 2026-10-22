@@ -25,8 +25,16 @@ public class StockMovement {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "target_warehouse_id")
+    private Warehouse targetWarehouse;
+
     @Column(name = "movement_type", nullable = false)
-    private String movementType; // "INVOICE", "PURCHASE", "MANUAL_ADJUSTMENT", "CREDIT_NOTE"
+    private String movementType; // "INVOICE", "PURCHASE", "MANUAL_ADJUSTMENT", "CREDIT_NOTE", "TRANSFER_OUT", "TRANSFER_IN"
 
     @Column(name = "quantity", nullable = false)
     private BigDecimal quantity;
@@ -52,7 +60,13 @@ public class StockMovement {
 
     public StockMovement(Business business, Product product, String movementType, BigDecimal quantity,
                          BigDecimal stockBefore, BigDecimal stockAfter, String referenceNumber, String notes) {
+        this(business, null, product, movementType, quantity, stockBefore, stockAfter, referenceNumber, notes);
+    }
+
+    public StockMovement(Business business, Warehouse warehouse, Product product, String movementType, BigDecimal quantity,
+                         BigDecimal stockBefore, BigDecimal stockAfter, String referenceNumber, String notes) {
         this.business = business;
+        this.warehouse = warehouse;
         this.product = product;
         this.movementType = movementType;
         this.quantity = quantity;
@@ -133,6 +147,22 @@ public class StockMovement {
 
     public void setNotes(String notes) {
         this.notes = notes;
+    }
+
+    public Warehouse getWarehouse() {
+        return warehouse;
+    }
+
+    public void setWarehouse(Warehouse warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public Warehouse getTargetWarehouse() {
+        return targetWarehouse;
+    }
+
+    public void setTargetWarehouse(Warehouse targetWarehouse) {
+        this.targetWarehouse = targetWarehouse;
     }
 
     public LocalDateTime getCreatedAt() {

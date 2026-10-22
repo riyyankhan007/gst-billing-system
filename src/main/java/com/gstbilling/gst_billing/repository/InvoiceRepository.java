@@ -24,6 +24,8 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     List<Invoice> findByCustomer_IdAndBusiness_IdOrderByCreatedAtDesc(Long customerId, Long businessId);
 
+    List<Invoice> findByCustomer_IdAndBusiness_IdOrderByInvoiceDateDescIdDesc(Long customerId, Long businessId);
+
     List<Invoice> findByBusiness_IdAndInvoiceDateBetween(Long businessId, LocalDate startDate, LocalDate endDate);
 
     boolean existsByBusiness_IdAndInvoiceNumberIgnoreCase(Long businessId, String invoiceNumber);

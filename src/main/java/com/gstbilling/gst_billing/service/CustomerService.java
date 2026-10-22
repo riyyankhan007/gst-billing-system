@@ -8,6 +8,7 @@ import com.gstbilling.gst_billing.repository.InvoiceRepository;
 import com.gstbilling.gst_billing.util.IndianTaxValidator;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -108,11 +109,12 @@ public class CustomerService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Customer not found or not accessible"));
     }
 
+    @Transactional(readOnly = true)
     public CustomerDetailsResponse getCustomerDetails(Long id) {
         Customer customer = getCustomerById(id);
         Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
 
-        List<Invoice> customerInvoices = invoiceRepository.findByCustomer_IdAndBusiness_IdOrderByCreatedAtDesc(id, businessId);
+        List<Invoice> customerInvoices = invoiceRepository.findByCustomer_IdAndBusiness_IdOrderByInvoiceDateDescIdDesc(id, businessId);
 
         BigDecimal totalInvoiced = BigDecimal.ZERO;
         BigDecimal totalPaid = BigDecimal.ZERO;
@@ -121,6 +123,14 @@ public class CustomerService {
         LocalDate today = LocalDate.now();
 
         for (Invoice inv : customerInvoices) {
+            checkAndUpdateOverdue(inv);
+            if (inv.getItems() != null) {
+                inv.getItems().size();
+            }
+            if (inv.getCustomer() != null) {
+                inv.getCustomer().getName();
+            }
+
             if ("CANCELLED".equalsIgnoreCase(inv.getStatus()) || "DRAFT".equalsIgnoreCase(inv.getStatus())) {
                 continue;
             }
@@ -155,6 +165,21 @@ public class CustomerService {
                 pendingCount,
                 customerInvoices
         );
+    }
+
+    private void checkAndUpdateOverdue(Invoice invoice) {
+        if (invoice == null) return;
+        if (!"CANCELLED".equalsIgnoreCase(invoice.getStatus())
+                && !"PAID".equalsIgnoreCase(invoice.getStatus())
+                && !"DRAFT".equalsIgnoreCase(invoice.getStatus())) {
+
+            if (invoice.getDueDate() != null
+                    && LocalDate.now().isAfter(invoice.getDueDate())
+                    && invoice.getBalanceAmount() != null
+                    && invoice.getBalanceAmount().compareTo(BigDecimal.ZERO) > 0) {
+                invoice.setStatus("OVERDUE");
+            }
+        }
     }
 
     public Customer updateCustomer(Long id, Customer changes) {

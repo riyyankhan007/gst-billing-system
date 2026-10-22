@@ -1,5 +1,7 @@
 package com.gstbilling.gst_billing.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.gstbilling.gst_billing.entity.Customer;
 import com.gstbilling.gst_billing.entity.Invoice;
 
@@ -14,5 +16,12 @@ public record CustomerDetailsResponse(
         BigDecimal overdueAmount,
         int totalInvoicesCount,
         int pendingInvoicesCount,
-        List<Invoice> recentInvoices
-) {}
+        @JsonProperty("invoices")
+        @JsonAlias({"invoices", "recentInvoices"})
+        List<Invoice> invoices
+) {
+    @JsonProperty("recentInvoices")
+    public List<Invoice> recentInvoices() {
+        return invoices;
+    }
+}

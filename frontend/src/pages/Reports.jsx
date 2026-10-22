@@ -1,11 +1,40 @@
 import React, { useEffect, useState } from "react";
 import Icon from "../components/Icon";
 import { getSalesReport, getGstReport, getCustomerReport, getProductReport, downloadExportCsv } from "../services/api";
+import { SkeletonKpi, SkeletonTable } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import { useToast } from "../context/ToastContext";
+
+function ReportSkeleton({ tab }) {
+    if (tab === "sales" || tab === "gst") {
+        return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                <div className="analytics-kpi-grid">
+                    <SkeletonKpi />
+                    <SkeletonKpi />
+                    <SkeletonKpi />
+                    <SkeletonKpi />
+                </div>
+                <div className="table-card">
+                    <SkeletonTable rows={5} columns={tab === "sales" ? 5 : 9} />
+                </div>
+            </div>
+        );
+    }
+    return (
+        <div className="table-card">
+            <SkeletonTable rows={6} columns={tab === "customers" ? 9 : 7} />
+        </div>
+    );
+}
 
 export default function Reports() {
+    const toast = useToast();
     const [tab, setTab] = useState("sales"); // "sales", "gst", "customers", "products"
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
+    const [exportingType, setExportingType] = useState(null);
 
     // Date filters
     const todayStr = new Date().toISOString().split("T")[0];
@@ -21,6 +50,14 @@ export default function Reports() {
 
     useEffect(() => {
         loadReport();
+    }, [tab, startDate, endDate]);
+
+    useEffect(() => {
+        const handleBizSwitch = () => {
+            loadReport();
+        };
+        window.addEventListener("business-switched", handleBizSwitch);
+        return () => window.removeEventListener("business-switched", handleBizSwitch);
     }, [tab, startDate, endDate]);
 
     async function loadReport() {
@@ -49,6 +86,7 @@ export default function Reports() {
 
     async function handleExport(type) {
         try {
+            setExportingType(type);
             const blob = await downloadExportCsv(type);
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -57,12 +95,23 @@ export default function Reports() {
             document.body.appendChild(a);
             a.click();
             a.remove();
+            toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} CSV exported successfully`);
         } catch (err) {
-            alert(err.message || "Export failed");
+            toast.error(err.message || "Export failed");
+        } finally {
+            setExportingType(null);
         }
     }
 
     const fmt = val => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(val || 0));
+
+    const hasData = () => {
+        if (tab === "sales") return salesData !== null;
+        if (tab === "gst") return gstData !== null;
+        if (tab === "customers") return customerData && customerData.length > 0;
+        if (tab === "products") return productData && productData.length > 0;
+        return false;
+    };
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -75,60 +124,70 @@ export default function Reports() {
                 </div>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
                     <span style={{ fontSize: "12px", color: "var(--text-muted)", fontWeight: "600" }}>Export CSV:</span>
-                    <button type="button" className="action-btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }} onClick={() => handleExport("invoices")}>
-                        <Icon type="download" size={13} /> Invoices
-                    </button>
-                    <button type="button" className="action-btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }} onClick={() => handleExport("customers")}>
-                        <Icon type="download" size={13} /> Customers
-                    </button>
-                    <button type="button" className="action-btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }} onClick={() => handleExport("products")}>
-                        <Icon type="download" size={13} /> Products
-                    </button>
-                    <button type="button" className="action-btn-sm" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }} onClick={() => handleExport("payments")}>
-                        <Icon type="download" size={13} /> Payments
-                    </button>
+                    {["invoices", "customers", "products", "payments"].map(type => (
+                        <button
+                            key={type}
+                            type="button"
+                            className={`action-btn-sm ${exportingType === type ? "btn-loading" : ""}`}
+                            style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}
+                            onClick={() => handleExport(type)}
+                            disabled={exportingType !== null}
+                        >
+                            {exportingType === type ? <span className="inline-spinner" /> : <Icon type="download" size={13} />}
+                            <span>{type.charAt(0).toUpperCase() + type.slice(1)}</span>
+                        </button>
+                    ))}
                 </div>
             </div>
 
             {error && (
-                <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.12)", color: "var(--danger)", borderRadius: "var(--radius-sm)", border: "1px solid #fecaca", fontWeight: 500 }}>
-                    {error}
-                </div>
+                <ErrorState
+                    message={error}
+                    onRetry={loadReport}
+                />
             )}
 
             {/* Filter & Navigation Bar */}
             <div className="table-card" style={{ padding: "14px 20px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
                     {/* Navigation Tabs */}
-                    <div className="analytics-range-selector">
-                        <button
-                            type="button"
-                            className={`range-tab-btn ${tab === "sales" ? "active" : ""}`}
-                            onClick={() => setTab("sales")}
-                        >
-                            Sales Report
-                        </button>
-                        <button
-                            type="button"
-                            className={`range-tab-btn ${tab === "gst" ? "active" : ""}`}
-                            onClick={() => setTab("gst")}
-                        >
-                            GST / GSTR-1 Summary
-                        </button>
-                        <button
-                            type="button"
-                            className={`range-tab-btn ${tab === "customers" ? "active" : ""}`}
-                            onClick={() => setTab("customers")}
-                        >
-                            Customer Ledger
-                        </button>
-                        <button
-                            type="button"
-                            className={`range-tab-btn ${tab === "products" ? "active" : ""}`}
-                            onClick={() => setTab("products")}
-                        >
-                            Product Sales
-                        </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div className="analytics-range-selector">
+                            <button
+                                type="button"
+                                className={`range-tab-btn ${tab === "sales" ? "active" : ""}`}
+                                onClick={() => setTab("sales")}
+                            >
+                                Sales Report
+                            </button>
+                            <button
+                                type="button"
+                                className={`range-tab-btn ${tab === "gst" ? "active" : ""}`}
+                                onClick={() => setTab("gst")}
+                            >
+                                GST / GSTR-1 Summary
+                            </button>
+                            <button
+                                type="button"
+                                className={`range-tab-btn ${tab === "customers" ? "active" : ""}`}
+                                onClick={() => setTab("customers")}
+                            >
+                                Customer Ledger
+                            </button>
+                            <button
+                                type="button"
+                                className={`range-tab-btn ${tab === "products" ? "active" : ""}`}
+                                onClick={() => setTab("products")}
+                            >
+                                Product Sales
+                            </button>
+                        </div>
+                        {loading && hasData() && (
+                            <span className="refresh-indicator" style={{ margin: 0 }}>
+                                <span className="inline-spinner" style={{ width: "12px", height: "12px" }} />
+                                <span>Updating metrics...</span>
+                            </span>
+                        )}
                     </div>
 
                     {/* Date Range Picker for Sales & GST tabs */}
@@ -148,8 +207,15 @@ export default function Reports() {
                                 value={endDate}
                                 onChange={e => setEndDate(e.target.value)}
                             />
-                            <button type="button" className="action-btn-sm primary-button" style={{ padding: "4px 10px", fontSize: "11.5px" }} onClick={() => loadReport()}>
-                                Refresh
+                            <button
+                                type="button"
+                                className={`action-btn-sm primary-button ${loading ? "btn-loading" : ""}`}
+                                style={{ padding: "4px 10px", fontSize: "11.5px" }}
+                                onClick={() => loadReport()}
+                                disabled={loading}
+                            >
+                                {loading && <span className="inline-spinner" />}
+                                <span>Refresh</span>
                             </button>
                         </div>
                     )}
@@ -157,11 +223,8 @@ export default function Reports() {
             </div>
 
             {/* Content Area */}
-            {loading ? (
-                <div className="card loading-state" style={{ padding: "40px", textAlign: "center" }}>
-                    <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                    <p>Generating report metrics...</p>
-                </div>
+            {loading && !hasData() ? (
+                <ReportSkeleton tab={tab} />
             ) : (
                 <>
                     {/* TAB 1: SALES REPORT */}
@@ -202,7 +265,14 @@ export default function Reports() {
                                     </div>
                                 </div>
                                 {salesData.dailyBreakdown.length === 0 ? (
-                                    <p style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>No sales recorded in this date range.</p>
+                                    <EmptyState
+                                        icon="report"
+                                        title="No sales in selected period"
+                                        message="No invoices were recorded between the chosen start and end dates. Try expanding your date range."
+                                        actionLabel="Refresh Data"
+                                        actionIcon="refresh"
+                                        onAction={() => loadReport()}
+                                    />
                                 ) : (
                                     <div className="table-container">
                                         <table className="table">
@@ -265,7 +335,7 @@ export default function Reports() {
                             </div>
 
                             {/* B2B / B2C / Export Section */}
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
+                            <div className="reports-categories-grid">
                                 <div className="card" style={{ padding: "20px" }}>
                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                                         <h4 style={{ margin: 0, fontSize: "15px", fontWeight: "700" }}>B2B Invoices (Registered)</h4>
@@ -306,7 +376,11 @@ export default function Reports() {
                                     </div>
                                 </div>
                                 {gstData.hsnSummary.length === 0 ? (
-                                    <p style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>No HSN items in this date range.</p>
+                                    <EmptyState
+                                        icon="report"
+                                        title="No HSN summary data"
+                                        message="No billed line items with HSN/SAC codes found for this period."
+                                    />
                                 ) : (
                                     <div className="table-container">
                                         <table className="table">
@@ -355,7 +429,11 @@ export default function Reports() {
                                 </div>
                             </div>
                             {customerData.length === 0 ? (
-                                <p style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>No customer records found.</p>
+                                <EmptyState
+                                    icon="user"
+                                    title="No customer ledger records"
+                                    message="Customer receivables and turnover records will appear after invoices are issued."
+                                />
                             ) : (
                                 <div className="table-container">
                                     <table className="table">
@@ -411,7 +489,11 @@ export default function Reports() {
                                 </div>
                             </div>
                             {productData.length === 0 ? (
-                                <p style={{ padding: "30px", textAlign: "center", color: "var(--text-muted)" }}>No products found.</p>
+                                <EmptyState
+                                    icon="box"
+                                    title="No product sales records"
+                                    message="Product turnover and unit sales will appear once line items are added to invoices."
+                                />
                             ) : (
                                 <div className="table-container">
                                     <table className="table">

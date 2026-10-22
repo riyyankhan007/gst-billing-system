@@ -4,21 +4,28 @@ import {
     getBusinesses,
     getCustomers,
     getProducts,
+    getWarehouses,
     createInvoice
 } from "../services/api";
+import { Skeleton, SkeletonCard } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import { useToast } from "../context/ToastContext";
 
 export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
+    const toast = useToast();
     const [businesses, setBusinesses] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [products, setProducts] = useState([]);
+    const [warehouses, setWarehouses] = useState([]);
 
     const [businessId, setBusinessId] = useState("");
+    const [warehouseId, setWarehouseId] = useState("");
     const [customerId, setCustomerId] = useState("");
-    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split("T")[0]);
+    const [invoiceDate, setInvoiceDate] = useState(() => new Date().toISOString().split("T")[0]);
     const [dueDate, setDueDate] = useState("");
     const [discountAmount, setDiscountAmount] = useState("0");
-    const [notes, setNotes] = useState("");
-    const [termsAndConditions, setTermsAndConditions] = useState("");
+    const [notes, _setNotes] = useState("");
+    const [termsAndConditions, _setTermsAndConditions] = useState("");
 
     const [items, setItems] = useState([
         {
@@ -30,24 +37,32 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
 
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [savingStatus, setSavingStatus] = useState(""); // "DRAFT" | "ISSUED" | ""
     const [message, setMessage] = useState({ text: "", type: "" });
+
 
     useEffect(() => {
         async function loadFormData() {
             try {
                 setLoading(true);
-                const [bizList, custList, prodList] = await Promise.all([
+                const [bizList, custList, prodList, whList] = await Promise.all([
                     getBusinesses(),
                     getCustomers(),
-                    getProducts()
+                    getProducts(),
+                    getWarehouses().catch(() => [])
                 ]);
 
                 setBusinesses(bizList || []);
                 setCustomers(custList || []);
                 setProducts(prodList || []);
+                setWarehouses(whList || []);
 
                 if (bizList && bizList.length > 0) {
                     setBusinessId(String(bizList[0].id));
+                }
+                if (whList && whList.length > 0) {
+                    const defWh = whList.find(w => w.isDefault) || whList[0];
+                    setWarehouseId(String(defWh.id));
                 }
             } catch (err) {
                 setMessage({ text: err.message || "Failed to load form dependencies", type: "error" });
@@ -173,9 +188,11 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
         }
 
         setSaving(true);
+        setSavingStatus(desiredStatus);
 
         const payload = {
             customerId: Number(customerId),
+            warehouseId: warehouseId ? Number(warehouseId) : null,
             invoiceDate: invoiceDate,
             dueDate: dueDate || null,
             discountAmount: Number(discountAmount || 0),
@@ -199,6 +216,7 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
 
         try {
             const created = await createInvoice(payload, idempotencyKey);
+            toast.success(`Invoice #${created.invoiceNumber} created (${created.status})!`);
             setMessage({ text: `Invoice #${created.invoiceNumber} created (${created.status})!`, type: "success" });
             setTimeout(() => {
                 if (onCreated) {
@@ -206,13 +224,16 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
                 } else if (onBack) {
                     onBack();
                 }
-            }, 1000);
+            }, 800);
         } catch (err) {
+            toast.error(err.message || "Failed to create invoice");
             setMessage({ text: err.message || "Failed to create invoice", type: "error" });
         } finally {
             setSaving(false);
+            setSavingStatus("");
         }
     }
+
 
     function formatCurrency(val) {
         return `₹${Number(val || 0).toLocaleString("en-IN", {
@@ -249,54 +270,63 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
             )}
 
             {loading ? (
-                <div className="content-section">
-                    <div className="empty-state">
-                        <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                        <p>Loading business and customer records...</p>
-                    </div>
+                <div className="management-layout" aria-busy="true">
+                    <section className="form-panel" style={{ padding: "24px" }}>
+                        <Skeleton width="180px" height="22px" style={{ marginBottom: "20px" }} />
+                        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                            <div>
+                                <Skeleton width="120px" height="13px" style={{ marginBottom: "6px" }} />
+                                <Skeleton width="100%" height="40px" borderRadius="6px" />
+                            </div>
+                            <div>
+                                <Skeleton width="140px" height="13px" style={{ marginBottom: "6px" }} />
+                                <Skeleton width="100%" height="40px" borderRadius="6px" />
+                            </div>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                <div>
+                                    <Skeleton width="100px" height="13px" style={{ marginBottom: "6px" }} />
+                                    <Skeleton width="100%" height="40px" borderRadius="6px" />
+                                </div>
+                                <div>
+                                    <Skeleton width="100px" height="13px" style={{ marginBottom: "6px" }} />
+                                    <Skeleton width="100%" height="40px" borderRadius="6px" />
+                                </div>
+                            </div>
+                            <div>
+                                <Skeleton width="150px" height="16px" style={{ marginBottom: "12px" }} />
+                                <Skeleton width="100%" height="52px" borderRadius="6px" />
+                            </div>
+                            <div style={{ display: "flex", gap: "10px", marginTop: "12px" }}>
+                                <Skeleton width="50%" height="40px" borderRadius="6px" />
+                                <Skeleton width="50%" height="40px" borderRadius="6px" />
+                            </div>
+                        </div>
+                    </section>
+                    <section className="data-panel" style={{ padding: "24px" }}>
+                        <Skeleton width="100px" height="12px" style={{ marginBottom: "8px" }} />
+                        <Skeleton width="160px" height="22px" style={{ marginBottom: "20px" }} />
+                        <SkeletonCard lines={4} hasHeader={false} />
+                    </section>
                 </div>
             ) : customers.length === 0 ? (
-                <div className="content-section">
-                    <div className="empty-state">
-                        <div className="empty-state-icon">
-                            <Icon type="customer" size={26} />
-                        </div>
-                        <h3>No customers found</h3>
-                        <p>You need to create at least one customer before generating a GST invoice.</p>
-                        {onNavigate && (
-                            <button
-                                type="button"
-                                className="primary-button"
-                                onClick={() => onNavigate("customers")}
-                            >
-                                <Icon type="plus" size={13} />
-                                <span>Add New Customer</span>
-                            </button>
-                        )}
-                    </div>
-                </div>
+                <EmptyState
+                    icon="customer"
+                    title="No customers registered yet"
+                    description="You need to create at least one customer before generating a GST invoice."
+                    actionLabel="Add New Customer"
+                    onAction={() => onNavigate && onNavigate("customers")}
+                />
             ) : products.length === 0 ? (
-                <div className="content-section">
-                    <div className="empty-state">
-                        <div className="empty-state-icon">
-                            <Icon type="product" size={26} />
-                        </div>
-                        <h3>No products found</h3>
-                        <p>You need to add at least one product or service before creating a GST invoice.</p>
-                        {onNavigate && (
-                            <button
-                                type="button"
-                                className="primary-button"
-                                onClick={() => onNavigate("products")}
-                            >
-                                <Icon type="plus" size={13} />
-                                <span>Add First Product</span>
-                            </button>
-                        )}
-                    </div>
-                </div>
+                <EmptyState
+                    icon="product"
+                    title="No catalogue products found"
+                    description="You need to add at least one product or service before generating a GST invoice."
+                    actionLabel="Add First Product"
+                    onAction={() => onNavigate && onNavigate("products")}
+                />
             ) : (
                 <div className="management-layout">
+
                     {/* LEFT PANEL: Form Inputs */}
                     <section className="form-panel">
                         <div className="form-panel-header">
@@ -321,6 +351,26 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
                                     ))}
                                 </select>
                             </div>
+
+                            {warehouses.length > 0 && (
+                                <div className="form-field">
+                                    <label htmlFor="inv-warehouse">
+                                        Dispatch Warehouse / Location <span className="req-star">*</span>
+                                    </label>
+                                    <select
+                                        id="inv-warehouse"
+                                        value={warehouseId}
+                                        onChange={e => setWarehouseId(e.target.value)}
+                                        required
+                                    >
+                                        {warehouses.map(w => (
+                                            <option key={w.id} value={w.id}>
+                                                {w.name} ({w.code}){w.isDefault ? " (Default)" : ""}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
 
                             <div className="form-field">
                                 <label htmlFor="inv-customer">
@@ -393,9 +443,6 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
                                 </div>
 
                                 {items.map((item, index) => {
-                                    const selectedProd = products.find(p => p.id === Number(item.productId));
-                                    const lineTotal = selectedProd ? selectedProd.price * (Number(item.quantity) || 0) : 0;
-
                                     return (
                                         <div className="invoice-item-row" key={index}>
                                             <select
@@ -448,24 +495,49 @@ export default function CreateInvoice({ onBack, onCreated, onNavigate }) {
                             <div style={{ display: "flex", gap: "10px", marginTop: "24px" }}>
                                 <button
                                     type="button"
-                                    className="secondary-button"
-                                    style={{ flex: 1 }}
+                                    className={`secondary-button ${savingStatus === "DRAFT" ? "btn-loading" : ""}`}
+                                    style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                                     disabled={saving}
                                     onClick={e => handleCreateInvoice(e, "DRAFT")}
                                 >
-                                    Save as Draft
+                                    {savingStatus === "DRAFT" && (
+                                        <span
+                                            className="inline-spinner"
+                                            style={{
+                                                width: "12px",
+                                                height: "12px",
+                                                border: "2px solid var(--text-muted)",
+                                                borderTopColor: "var(--text-primary)",
+                                                borderRadius: "50%"
+                                            }}
+                                        />
+                                    )}
+                                    <span>{savingStatus === "DRAFT" ? "Saving Draft..." : "Save as Draft"}</span>
                                 </button>
                                 <button
                                     type="button"
-                                    className="primary-button"
-                                    style={{ flex: 1 }}
+                                    className={`primary-button ${savingStatus === "ISSUED" ? "btn-loading" : ""}`}
+                                    style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
                                     disabled={saving}
                                     onClick={e => handleCreateInvoice(e, "ISSUED")}
                                 >
-                                    {saving ? "Creating..." : "Create & Issue"}
+                                    {savingStatus === "ISSUED" && (
+                                        <span
+                                            className="inline-spinner"
+                                            style={{
+                                                width: "12px",
+                                                height: "12px",
+                                                border: "2px solid rgba(255, 255, 255, 0.4)",
+                                                borderTopColor: "#ffffff",
+                                                borderRadius: "50%"
+                                            }}
+                                        />
+                                    )}
+                                    <span>{savingStatus === "ISSUED" ? "Creating & Issuing..." : "Create & Issue"}</span>
                                 </button>
                             </div>
                         </form>
+
                     </section>
 
                     {/* RIGHT PANEL: Live Summary */}

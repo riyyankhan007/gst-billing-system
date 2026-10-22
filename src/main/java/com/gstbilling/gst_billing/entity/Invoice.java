@@ -40,6 +40,14 @@ public class Invoice {
     @Transient
     private Long customerId;
 
+    // Warehouse for stock deduction
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "warehouse_id")
+    private Warehouse warehouse;
+
+    @Transient
+    private Long warehouseId;
+
     // Invoice items
     @OneToMany(
             mappedBy = "invoice",
@@ -467,5 +475,21 @@ public class Invoice {
         } catch (IllegalArgumentException e) {
             return InvoiceStatus.DRAFT;
         }
+    }
+
+    public Warehouse getWarehouse() {
+        return warehouse;
+    }
+
+    public void setWarehouse(Warehouse warehouse) {
+        this.warehouse = warehouse;
+    }
+
+    public Long getWarehouseId() {
+        return warehouseId != null ? warehouseId : (warehouse != null ? warehouse.getId() : null);
+    }
+
+    public void setWarehouseId(Long warehouseId) {
+        this.warehouseId = warehouseId;
     }
 }

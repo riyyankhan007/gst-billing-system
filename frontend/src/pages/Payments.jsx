@@ -1,14 +1,30 @@
 import React, { useEffect, useState } from "react";
 import Icon from "../components/Icon";
 import { getPayments, recordPayment, deletePayment, getInvoices, downloadPaymentReceiptPdf, reconcileAllPayments } from "../services/api";
+import { SkeletonTable } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
+import { useToast } from "../context/ToastContext";
 
 export default function Payments({ onSelectInvoice }) {
+    const toast = useToast();
     const [payments, setPayments] = useState([]);
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [successMessage, setSuccessMessage] = useState("");
     const [reconciling, setReconciling] = useState(false);
+    const [downloadingReceiptId, setDownloadingReceiptId] = useState(null);
+
+    // Confirm Dialog state
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: "",
+        message: "",
+        confirmVariant: "danger",
+        onConfirm: null
+    });
+    const [actionLoading, setActionLoading] = useState(false);
 
     // Modal state
     const [showModal, setShowModal] = useState(false);
@@ -27,6 +43,14 @@ export default function Payments({ onSelectInvoice }) {
 
     useEffect(() => {
         loadData();
+    }, []);
+
+    useEffect(() => {
+        const handleBizSwitch = () => {
+            loadData();
+        };
+        window.addEventListener("business-switched", handleBizSwitch);
+        return () => window.removeEventListener("business-switched", handleBizSwitch);
     }, []);
 
     async function loadData() {
@@ -96,18 +120,20 @@ export default function Payments({ onSelectInvoice }) {
                 notes
             }, idempotencyKey);
             setShowModal(false);
-            setSuccessMessage(`Payment of ${fmt(payNum)} recorded successfully!`);
-            setTimeout(() => setSuccessMessage(""), 4000);
+            toast.success(`Payment of ${fmt(payNum)} recorded successfully!`);
             await loadData();
         } catch (err) {
             setModalError(err.message || "Failed to record payment");
+            toast.error(err.message || "Failed to record payment");
         } finally {
             setSubmitting(false);
         }
     }
 
     async function handleDownloadReceipt(payment) {
+        if (downloadingReceiptId) return;
         try {
+            setDownloadingReceiptId(payment.id);
             const blob = await downloadPaymentReceiptPdf(payment.id);
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
@@ -117,8 +143,11 @@ export default function Payments({ onSelectInvoice }) {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+            toast.success(`Receipt ${payment.receiptNumber || payment.id} downloaded.`);
         } catch (err) {
-            alert("Error downloading receipt PDF: " + err.message);
+            toast.error("Error downloading receipt PDF: " + err.message);
+        } finally {
+            setDownloadingReceiptId(null);
         }
     }
 
@@ -126,28 +155,36 @@ export default function Payments({ onSelectInvoice }) {
         try {
             setReconciling(true);
             const res = await reconcileAllPayments();
-            setSuccessMessage(`Ledger Reconciliation Complete: verified ${res.totalInvoicesChecked} invoices, resolved ${res.totalDriftsResolved} drifts.`);
-            setTimeout(() => setSuccessMessage(""), 5000);
+            toast.success(`Ledger Reconciliation Complete: verified ${res.totalInvoicesChecked} invoices, resolved ${res.totalDriftsResolved} drifts.`);
             await loadData();
         } catch (err) {
-            setError(err.message || "Failed to reconcile payments");
+            toast.error(err.message || "Failed to reconcile payments");
         } finally {
             setReconciling(false);
         }
     }
 
-    async function handleDeletePayment(id) {
-        if (!window.confirm("Are you sure you want to reverse/delete this payment record? The invoice balance will be adjusted.")) {
-            return;
-        }
-        try {
-            await deletePayment(id);
-            setSuccessMessage("Payment reversed successfully.");
-            setTimeout(() => setSuccessMessage(""), 4000);
-            await loadData();
-        } catch (err) {
-            setError(err.message || "Failed to delete payment");
-        }
+    function handleDeletePayment(id) {
+        setConfirmModal({
+            isOpen: true,
+            title: "Reverse Payment Record?",
+            message: "Are you sure you want to reverse/delete this payment record? The corresponding invoice balance will automatically be updated.",
+            confirmVariant: "danger",
+            confirmLabel: "Reverse Payment",
+            onConfirm: async () => {
+                try {
+                    setActionLoading(true);
+                    await deletePayment(id);
+                    toast.success("Payment reversed successfully.");
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    await loadData();
+                } catch (err) {
+                    toast.error(err.message || "Failed to delete payment");
+                } finally {
+                    setActionLoading(false);
+                }
+            }
+        });
     }
 
     const filteredPayments = payments.filter(p => {
@@ -173,13 +210,16 @@ export default function Payments({ onSelectInvoice }) {
                 </div>
                 <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                     <button
-                        className="secondary-button"
+                        className={`secondary-button ${reconciling ? "btn-loading" : ""}`}
                         onClick={handleReconcile}
                         disabled={reconciling}
                         title="Audit and heal any drift between payments and invoice balances"
                     >
                         {reconciling ? (
-                            "Reconciling..."
+                            <>
+                                <span className="inline-spinner" />
+                                <span>Reconciling...</span>
+                            </>
                         ) : (
                             <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
                                 <Icon type="refresh" size={13} /> Reconcile Ledgers
@@ -193,23 +233,11 @@ export default function Payments({ onSelectInvoice }) {
                 </div>
             </div>
 
-            {successMessage && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Icon type="checkCircle" size={16} color="#065f46" /> {successMessage}
-                </div>
-            )}
-
-            {error && (
-                <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", borderRadius: "8px" }}>
-                    {error}
-                </div>
-            )}
-
             {/* Filter & Summary Card */}
             <div className="card" style={{ padding: "16px 20px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
                     <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", flex: 1, alignItems: "center" }}>
-                        <div className="search-input-wrapper" style={{ minWidth: "280px", maxWidth: "420px", flex: 1 }}>
+                        <div className="search-input-wrapper" style={{ maxWidth: "420px", flex: 1 }}>
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <circle cx="11" cy="11" r="8" />
                                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
@@ -259,24 +287,32 @@ export default function Payments({ onSelectInvoice }) {
             {/* Payments Table */}
             <div className="table-card">
                 {loading ? (
-                    <div style={{ padding: "40px", textAlign: "center" }}>
-                        <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                        <p>Loading payments...</p>
+                    <div style={{ padding: "16px" }}>
+                        <SkeletonTable rows={6} columns={9} />
                     </div>
+                ) : error && payments.length === 0 ? (
+                    <ErrorState
+                        title="Failed to load payments"
+                        message={error}
+                        onRetry={loadData}
+                    />
                 ) : filteredPayments.length === 0 ? (
-                    <div className="empty-state">
-                        <div className="empty-state-icon">
-                            <Icon type="payment" size={26} />
-                        </div>
-                        <h3>No payment records found</h3>
-                        <p>Track collections, issue payment receipts, and reconcile customer balances.</p>
-                        {invoices.length > 0 && (
-                            <button className="primary-button" onClick={() => openRecordModal()}>
-                                <Icon type="plus" size={13} />
-                                <span>Record First Payment</span>
-                            </button>
-                        )}
-                    </div>
+                    <EmptyState
+                        icon="payment"
+                        title={payments.length === 0 ? "No payment records found" : "No matching payments found"}
+                        message={
+                            payments.length === 0
+                                ? "Track collections, issue payment receipts, and reconcile customer balances."
+                                : "No payment records match your search or filter criteria."
+                        }
+                        action={
+                            payments.length === 0 && invoices.length > 0
+                                ? { label: "Record First Payment", onClick: () => openRecordModal(), icon: "plus" }
+                                : search || methodFilter !== "ALL"
+                                ? { label: "Clear Filters", onClick: () => { setSearch(""); setMethodFilter("ALL"); } }
+                                : null
+                        }
+                    />
                 ) : (
                     <div className="table-container">
                         <table className="table">
@@ -331,11 +367,16 @@ export default function Payments({ onSelectInvoice }) {
                                             <div style={{ display: "inline-flex", gap: "6px", justifyContent: "flex-end" }}>
                                                 <button
                                                     type="button"
-                                                    className="action-btn-sm"
+                                                    className={`action-btn-sm ${downloadingReceiptId === p.id ? "btn-loading" : ""}`}
                                                     onClick={() => handleDownloadReceipt(p)}
+                                                    disabled={downloadingReceiptId === p.id}
                                                     title="Download official Payment Receipt PDF"
                                                 >
-                                                    Receipt
+                                                    {downloadingReceiptId === p.id ? (
+                                                        <span className="inline-spinner" />
+                                                    ) : (
+                                                        <span>Receipt</span>
+                                                    )}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -489,14 +530,32 @@ export default function Payments({ onSelectInvoice }) {
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                                    {submitting ? "Saving..." : "Confirm & Settle"}
+                                <button type="submit" className={`btn btn-primary ${submitting ? "btn-loading" : ""}`} disabled={submitting}>
+                                    {submitting ? (
+                                        <>
+                                            <span className="inline-spinner" />
+                                            <span>Saving...</span>
+                                        </>
+                                    ) : (
+                                        "Confirm & Settle"
+                                    )}
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmLabel={confirmModal.confirmLabel}
+                confirmVariant={confirmModal.confirmVariant}
+                isLoading={actionLoading}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+            />
         </div>
     );
 }

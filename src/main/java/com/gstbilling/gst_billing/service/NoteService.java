@@ -2,6 +2,7 @@ package com.gstbilling.gst_billing.service;
 
 import com.gstbilling.gst_billing.entity.*;
 import com.gstbilling.gst_billing.repository.*;
+import com.gstbilling.gst_billing.util.FinancialYearUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ public class NoteService {
     private final BusinessRepository businessRepository;
     private final CurrentUserService currentUserService;
     private final InvoiceSequenceService sequenceService;
+    private final AuditLogService auditLogService;
 
     public NoteService(CreditNoteRepository creditNoteRepository,
                        DebitNoteRepository debitNoteRepository,
@@ -30,7 +32,8 @@ public class NoteService {
                        CustomerRepository customerRepository,
                        BusinessRepository businessRepository,
                        CurrentUserService currentUserService,
-                       InvoiceSequenceService sequenceService) {
+                       InvoiceSequenceService sequenceService,
+                       AuditLogService auditLogService) {
         this.creditNoteRepository = creditNoteRepository;
         this.debitNoteRepository = debitNoteRepository;
         this.invoiceRepository = invoiceRepository;
@@ -38,6 +41,7 @@ public class NoteService {
         this.businessRepository = businessRepository;
         this.currentUserService = currentUserService;
         this.sequenceService = sequenceService;
+        this.auditLogService = auditLogService;
     }
 
     // =====================================
@@ -46,19 +50,28 @@ public class NoteService {
 
     @Transactional
     public CreditNote createCreditNote(CreditNote note) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         Business business = businessRepository.findById(businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Business not found"));
 
         Invoice invoice = invoiceRepository.findByIdAndBusiness_Id(note.getInvoiceId(), businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Invoice not found with ID: " + note.getInvoiceId()));
 
+        if ("CANCELLED".equalsIgnoreCase(invoice.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot issue credit note against a cancelled invoice");
+        }
+
         Customer customer = invoice.getCustomer();
+        LocalDate noteDate = note.getNoteDate() != null ? note.getNoteDate() : LocalDate.now();
+        String fy = FinancialYearUtil.getFinancialYear(noteDate);
+
         note.setBusiness(business);
         note.setInvoice(invoice);
         note.setCustomer(customer);
-        note.setNoteDate(note.getNoteDate() != null ? note.getNoteDate() : LocalDate.now());
+        note.setNoteDate(noteDate);
+        note.setFinancialYear(fy);
         note.setCreatedAt(LocalDateTime.now());
+        note.setCreatedBy(currentUserService.getCurrentUser().getEmail());
         note.setStatus("ISSUED");
 
         BigDecimal taxable = note.getTaxableAmount() != null ? note.getTaxableAmount() : BigDecimal.ZERO;
@@ -73,14 +86,21 @@ public class NoteService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Credit note grand total must be greater than zero.");
         }
 
-        BigDecimal invGrand = invoice.getGrandTotal() != null ? invoice.getGrandTotal() : BigDecimal.ZERO;
-        if (grandTotal.compareTo(invGrand) > 0) {
+        // Validate remaining eligible credit against the original invoice
+        List<CreditNote> existingNotes = creditNoteRepository.findByInvoice_IdAndBusiness_Id(invoice.getId(), businessId);
+        BigDecimal alreadyCredited = existingNotes.stream()
+                .filter(cn -> !"CANCELLED".equalsIgnoreCase(cn.getStatus()))
+                .map(CreditNote::getGrandTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal maxAllowed = invoice.getGrandTotal().subtract(alreadyCredited).setScale(2, RoundingMode.HALF_UP);
+        if (grandTotal.compareTo(maxAllowed) > 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    String.format("Credit note amount (₹%s) cannot exceed original invoice amount (₹%s)", grandTotal, invGrand));
+                    String.format("Credit note amount (₹%s) exceeds remaining eligible invoice balance (₹%s)", grandTotal, maxAllowed));
         }
 
         // Concurrency-safe number generation
-        String noteNumber = sequenceService.generateNextCreditNoteNumber(business, note.getNoteDate());
+        String noteNumber = sequenceService.generateNextCreditNoteNumber(business, noteDate);
         note.setCreditNoteNumber(noteNumber);
 
         // Taxes
@@ -113,18 +133,21 @@ public class NoteService {
         }
         invoiceRepository.save(invoice);
 
+        auditLogService.logAction("CREATE_CREDIT_NOTE", "CREDIT_NOTE", saved.getId(),
+                "Issued credit note " + saved.getCreditNoteNumber() + " for Rs. " + grandTotal + " against invoice " + invoice.getInvoiceNumber());
+
         return saved;
     }
 
     @Transactional(readOnly = true)
     public List<CreditNote> getAllCreditNotes() {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         return creditNoteRepository.findByBusiness_IdOrderByNoteDateDescIdDesc(businessId);
     }
 
     @Transactional(readOnly = true)
     public CreditNote getCreditNoteById(Long id) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         return creditNoteRepository.findByIdAndBusiness_Id(id, businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Credit note not found with ID: " + id));
     }
@@ -135,6 +158,7 @@ public class NoteService {
         if ("CANCELLED".equalsIgnoreCase(note.getStatus())) return note;
 
         note.setStatus("CANCELLED");
+        note.setUpdatedAt(LocalDateTime.now());
         Invoice inv = note.getInvoice();
         if (inv != null) {
             BigDecimal currentBal = inv.getBalanceAmount() != null ? inv.getBalanceAmount() : BigDecimal.ZERO;
@@ -142,7 +166,11 @@ public class NoteService {
             invoiceRepository.save(inv);
         }
 
-        return creditNoteRepository.save(note);
+        CreditNote saved = creditNoteRepository.save(note);
+        auditLogService.logAction("CANCEL_CREDIT_NOTE", "CREDIT_NOTE", saved.getId(),
+                "Cancelled credit note " + saved.getCreditNoteNumber() + " and restored Rs. " + saved.getGrandTotal() + " to invoice balance");
+
+        return saved;
     }
 
     // =====================================
@@ -151,7 +179,7 @@ public class NoteService {
 
     @Transactional
     public DebitNote createDebitNote(DebitNote note) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         Business business = businessRepository.findById(businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Business not found"));
 
@@ -164,11 +192,16 @@ public class NoteService {
             customer = invoice.getCustomer();
         }
 
+        LocalDate noteDate = note.getNoteDate() != null ? note.getNoteDate() : LocalDate.now();
+        String fy = FinancialYearUtil.getFinancialYear(noteDate);
+
         note.setBusiness(business);
         note.setInvoice(invoice);
         note.setCustomer(customer);
-        note.setNoteDate(note.getNoteDate() != null ? note.getNoteDate() : LocalDate.now());
+        note.setNoteDate(noteDate);
+        note.setFinancialYear(fy);
         note.setCreatedAt(LocalDateTime.now());
+        note.setCreatedBy(currentUserService.getCurrentUser().getEmail());
         note.setStatus("ISSUED");
 
         BigDecimal taxable = note.getTaxableAmount() != null ? note.getTaxableAmount() : BigDecimal.ZERO;
@@ -184,9 +217,8 @@ public class NoteService {
         }
 
         // Concurrency-safe number generation
-        String noteNumber = sequenceService.generateNextDebitNoteNumber(business, note.getNoteDate());
+        String noteNumber = sequenceService.generateNextDebitNoteNumber(business, noteDate);
         note.setDebitNoteNumber(noteNumber);
-
         note.setGrandTotal(grandTotal);
 
         boolean isIntra = invoice != null && invoice.getSupplierState() != null && invoice.getCustomerState() != null
@@ -211,18 +243,21 @@ public class NoteService {
             invoiceRepository.save(invoice);
         }
 
+        auditLogService.logAction("CREATE_DEBIT_NOTE", "DEBIT_NOTE", saved.getId(),
+                "Issued debit note " + saved.getDebitNoteNumber() + " for Rs. " + grandTotal + (invoice != null ? " against invoice " + invoice.getInvoiceNumber() : ""));
+
         return saved;
     }
 
     @Transactional(readOnly = true)
     public List<DebitNote> getAllDebitNotes() {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         return debitNoteRepository.findByBusiness_IdOrderByNoteDateDescIdDesc(businessId);
     }
 
     @Transactional(readOnly = true)
     public DebitNote getDebitNoteById(Long id) {
-        Long businessId = currentUserService.getCurrentUser().getBusiness().getId();
+        Long businessId = currentUserService.getCurrentTenantId();
         return debitNoteRepository.findByIdAndBusiness_Id(id, businessId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Debit note not found with ID: " + id));
     }
@@ -233,6 +268,7 @@ public class NoteService {
         if ("CANCELLED".equalsIgnoreCase(note.getStatus())) return note;
 
         note.setStatus("CANCELLED");
+        note.setUpdatedAt(LocalDateTime.now());
         Invoice inv = note.getInvoice();
         if (inv != null) {
             BigDecimal currentBal = inv.getBalanceAmount() != null ? inv.getBalanceAmount() : BigDecimal.ZERO;
@@ -242,6 +278,10 @@ public class NoteService {
             invoiceRepository.save(inv);
         }
 
-        return debitNoteRepository.save(note);
+        DebitNote saved = debitNoteRepository.save(note);
+        auditLogService.logAction("CANCEL_DEBIT_NOTE", "DEBIT_NOTE", saved.getId(),
+                "Cancelled debit note " + saved.getDebitNoteNumber() + " and adjusted invoice balance");
+
+        return saved;
     }
 }

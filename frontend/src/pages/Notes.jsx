@@ -1,15 +1,30 @@
 import React, { useEffect, useState } from "react";
 import Icon from "../components/Icon";
 import { getCreditNotes, getDebitNotes, createCreditNote, cancelCreditNote, createDebitNote, cancelDebitNote, getInvoices } from "../services/api";
+import { SkeletonTable } from "../components/ui/Skeleton";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import ConfirmDialog from "../components/ui/ConfirmDialog";
+import { useToast } from "../context/ToastContext";
 
 export default function Notes() {
+    const toast = useToast();
     const [tab, setTab] = useState("credit"); // "credit" or "debit"
     const [creditNotes, setCreditNotes] = useState([]);
     const [debitNotes, setDebitNotes] = useState([]);
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [successMessage, setSuccessMessage] = useState("");
+
+    // Confirm dialog
+    const [confirmModal, setConfirmModal] = useState({
+        isOpen: false,
+        title: "",
+        message: "",
+        confirmVariant: "danger",
+        onConfirm: null
+    });
+    const [actionLoading, setActionLoading] = useState(false);
 
     // Modal
     const [showModal, setShowModal] = useState(false);
@@ -24,6 +39,14 @@ export default function Notes() {
 
     useEffect(() => {
         loadData();
+    }, []);
+
+    useEffect(() => {
+        const handleBizSwitch = () => {
+            loadData();
+        };
+        window.addEventListener("business-switched", handleBizSwitch);
+        return () => window.removeEventListener("business-switched", handleBizSwitch);
     }, []);
 
     async function loadData() {
@@ -88,7 +111,7 @@ export default function Notes() {
                     noteDate,
                     notes: noteText
                 });
-                setSuccessMessage("Credit Note issued and invoice balance adjusted!");
+                toast.success("Credit Note issued and invoice balance adjusted!");
             } else {
                 await createDebitNote({
                     invoiceId: Number(selectedInvoiceId),
@@ -98,32 +121,44 @@ export default function Notes() {
                     noteDate,
                     notes: noteText
                 });
-                setSuccessMessage("Debit Note issued and invoice balance adjusted!");
+                toast.success("Debit Note issued and invoice balance adjusted!");
             }
             setShowModal(false);
-            setTimeout(() => setSuccessMessage(""), 4000);
             await loadData();
         } catch (err) {
             setModalError(err.message || "Failed to issue note");
+            toast.error(err.message || "Failed to issue note");
         } finally {
             setSubmitting(false);
         }
     }
 
-    async function handleCancelNote(id, isCredit) {
-        if (!window.confirm(`Are you sure you want to cancel this ${isCredit ? "Credit" : "Debit"} Note?`)) return;
-        try {
-            if (isCredit) {
-                await cancelCreditNote(id);
-            } else {
-                await cancelDebitNote(id);
+    function handleCancelNote(id, isCredit) {
+        const noteType = isCredit ? "Credit Note" : "Debit Note";
+        setConfirmModal({
+            isOpen: true,
+            title: `Cancel ${noteType}?`,
+            message: `Are you sure you want to cancel this ${noteType}? The original invoice balance will automatically be restored.`,
+            confirmVariant: "danger",
+            confirmLabel: "Cancel Note",
+            onConfirm: async () => {
+                try {
+                    setActionLoading(true);
+                    if (isCredit) {
+                        await cancelCreditNote(id);
+                    } else {
+                        await cancelDebitNote(id);
+                    }
+                    toast.success(`${noteType} cancelled and balance restored.`);
+                    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    await loadData();
+                } catch (err) {
+                    toast.error(err.message || "Failed to cancel note");
+                } finally {
+                    setActionLoading(false);
+                }
             }
-            setSuccessMessage("Note cancelled and original balance restored.");
-            setTimeout(() => setSuccessMessage(""), 4000);
-            await loadData();
-        } catch (err) {
-            setError(err.message || "Failed to cancel note");
-        }
+        });
     }
 
     const currentList = tab === "credit" ? creditNotes : debitNotes;
@@ -141,12 +176,6 @@ export default function Notes() {
                     <span>Issue {tab === "credit" ? "Credit Note" : "Debit Note"}</span>
                 </button>
             </div>
-
-            {successMessage && (
-                <div style={{ padding: "12px 16px", background: "rgba(16, 185, 129, 0.15)", color: "#065f46", borderRadius: "8px", fontWeight: "600", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Icon type="checkCircle" size={16} color="#065f46" /> {successMessage}
-                </div>
-            )}
 
             {error && (
                 <div style={{ padding: "12px 16px", background: "rgba(239, 68, 68, 0.15)", color: "var(--danger)", borderRadius: "8px" }}>
@@ -173,74 +202,76 @@ export default function Notes() {
             {/* Notes Table */}
             <div className="card" style={{ padding: 0, overflow: "hidden" }}>
                 {loading ? (
-                    <div style={{ padding: "40px", textAlign: "center" }}>
-                        <div className="spinner" style={{ margin: "0 auto 12px" }} />
-                        <p>Loading notes...</p>
+                    <div style={{ padding: "16px" }}>
+                        <SkeletonTable rows={5} columns={10} />
                     </div>
                 ) : currentList.length === 0 ? (
-                    <div className="empty-state">
-                        <div className="empty-state-icon">
-                            <Icon type="notes" size={26} />
-                        </div>
-                        <h3>No {tab === "credit" ? "credit notes" : "debit notes"} recorded</h3>
-                        <p>Issue GST adjustment notes for sales returns, revisions, or post-sale discounts.</p>
-                        {invoices.length > 0 && (
-                            <button className="primary-button" onClick={openModal}>
-                                <Icon type="plus" size={13} />
-                                <span>Issue First {tab === "credit" ? "Credit Note" : "Debit Note"}</span>
-                            </button>
-                        )}
-                    </div>
+                    <EmptyState
+                        icon="notes"
+                        title={tab === "credit" ? "No credit notes recorded" : "No debit notes recorded"}
+                        message={
+                            tab === "credit"
+                                ? "Issue GST Credit Notes for sales returns, post-sale discounts, or invoice corrections."
+                                : "Issue GST Debit Notes for upward price revisions or rate changes."
+                        }
+                        action={
+                            invoices.length > 0
+                                ? { label: `Issue First ${tab === "credit" ? "Credit Note" : "Debit Note"}`, onClick: openModal, icon: "plus" }
+                                : null
+                        }
+                    />
                 ) : (
-                    <table className="table" style={{ width: "100%", margin: 0 }}>
-                        <thead>
-                            <tr>
-                                <th>Note #</th>
-                                <th>Date</th>
-                                <th>Original Invoice</th>
-                                <th>Customer</th>
-                                <th>Reason</th>
-                                <th style={{ textAlign: "right" }}>Taxable</th>
-                                <th style={{ textAlign: "right" }}>GST Tax</th>
-                                <th style={{ textAlign: "right" }}>Total Note</th>
-                                <th>Status</th>
-                                <th style={{ textAlign: "center" }}>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {currentList.map(n => {
-                                const noteNum = tab === "credit" ? n.creditNoteNumber : n.debitNoteNumber;
-                                return (
-                                    <tr key={n.id}>
-                                        <td style={{ fontWeight: "600", fontFamily: "monospace" }}>{noteNum}</td>
-                                        <td>{n.noteDate}</td>
-                                        <td style={{ fontWeight: "600" }}>{n.invoice ? n.invoice.invoiceNumber : "-"}</td>
-                                        <td>{n.customer ? n.customer.name : "-"}</td>
-                                        <td>{n.reason}</td>
-                                        <td style={{ textAlign: "right" }}>{fmt(n.taxableAmount)}</td>
-                                        <td style={{ textAlign: "right", color: "#6366f1" }}>{fmt(n.totalTax)}</td>
-                                        <td style={{ textAlign: "right", fontWeight: "700" }}>{fmt(n.grandTotal)}</td>
-                                        <td>
-                                            <span className={`badge badge-${(n.status || "ISSUED").toLowerCase()}`}>
-                                                {n.status}
-                                            </span>
-                                        </td>
-                                        <td style={{ textAlign: "center" }}>
-                                            {n.status !== "CANCELLED" && (
-                                                <button
-                                                    className="btn btn-danger btn-sm"
-                                                    style={{ padding: "3px 8px", fontSize: "11px" }}
-                                                    onClick={() => handleCancelNote(n.id, tab === "credit")}
-                                                >
-                                                    Cancel
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
+                    <div className="table-container">
+                        <table className="table" style={{ width: "100%", margin: 0 }}>
+                            <thead>
+                                <tr>
+                                    <th>Note #</th>
+                                    <th>Date</th>
+                                    <th>Original Invoice</th>
+                                    <th>Customer</th>
+                                    <th>Reason</th>
+                                    <th style={{ textAlign: "right" }}>Taxable</th>
+                                    <th style={{ textAlign: "right" }}>GST Tax</th>
+                                    <th style={{ textAlign: "right" }}>Total Note</th>
+                                    <th>Status</th>
+                                    <th style={{ textAlign: "center" }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {currentList.map(n => {
+                                    const noteNum = tab === "credit" ? n.creditNoteNumber : n.debitNoteNumber;
+                                    return (
+                                        <tr key={n.id}>
+                                            <td style={{ fontWeight: "600", fontFamily: "monospace" }}>{noteNum}</td>
+                                            <td>{n.noteDate}</td>
+                                            <td style={{ fontWeight: "600" }}>{n.invoice ? n.invoice.invoiceNumber : "-"}</td>
+                                            <td>{n.customer ? n.customer.name : "-"}</td>
+                                            <td>{n.reason}</td>
+                                            <td style={{ textAlign: "right" }}>{fmt(n.taxableAmount)}</td>
+                                            <td style={{ textAlign: "right", color: "#6366f1" }}>{fmt(n.totalTax)}</td>
+                                            <td style={{ textAlign: "right", fontWeight: "700" }}>{fmt(n.grandTotal)}</td>
+                                            <td>
+                                                <span className={`badge badge-${(n.status || "ISSUED").toLowerCase()}`}>
+                                                    {n.status}
+                                                </span>
+                                            </td>
+                                            <td style={{ textAlign: "center" }}>
+                                                {n.status !== "CANCELLED" && (
+                                                    <button
+                                                        className="btn btn-danger btn-sm"
+                                                        style={{ padding: "3px 8px", fontSize: "11px" }}
+                                                        onClick={() => handleCancelNote(n.id, tab === "credit")}
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </div>
 
@@ -374,14 +405,32 @@ export default function Notes() {
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
                                     Cancel
                                 </button>
-                                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                                    {submitting ? "Issuing..." : `Issue ${tab === "credit" ? "Credit" : "Debit"} Note`}
+                                <button type="submit" className={`btn btn-primary ${submitting ? "btn-loading" : ""}`} disabled={submitting}>
+                                    {submitting ? (
+                                        <>
+                                            <span className="inline-spinner" />
+                                            <span>Issuing...</span>
+                                        </>
+                                    ) : (
+                                        `Issue ${tab === "credit" ? "Credit" : "Debit"} Note`
+                                    )}
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
+
+            <ConfirmDialog
+                isOpen={confirmModal.isOpen}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmLabel={confirmModal.confirmLabel}
+                confirmVariant={confirmModal.confirmVariant}
+                isLoading={actionLoading}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+            />
         </div>
     );
 }
