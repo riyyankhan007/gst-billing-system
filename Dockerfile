@@ -1,16 +1,15 @@
 # Stage 1: Build application
-FROM eclipse-temurin:21-jdk AS builder
+FROM maven:3.9.16-eclipse-temurin-21 AS builder
 
 WORKDIR /app
 
-# Cache Maven wrapper and dependencies
-COPY .mvn .mvn
-COPY mvnw pom.xml ./
-RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
+# Cache Maven dependencies
+COPY pom.xml ./
+RUN mvn dependency:go-offline -B
 
 # Build application bundle
 COPY src ./src
-RUN ./mvnw clean package -DskipTests
+RUN mvn clean package -DskipTests
 
 # Stage 2: Minimal, secure production runtime
 FROM eclipse-temurin:21-jre-jammy
