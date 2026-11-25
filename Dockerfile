@@ -3,13 +3,26 @@ FROM maven:3.9.16-eclipse-temurin-21 AS builder
 
 WORKDIR /app
 
+# Use Google's Maven Central mirror to avoid HTTP 429 rate-limiting on shared CI/cloud builders
+RUN mkdir -p /root/.m2 && printf '%s\n' \
+  '<settings>' \
+  '  <mirrors>' \
+  '    <mirror>' \
+  '      <id>google-maven-central</id>' \
+  '      <name>GCS Maven Central mirror</name>' \
+  '      <url>https://maven-central.storage-download.googleapis.com/maven2</url>' \
+  '      <mirrorOf>central</mirrorOf>' \
+  '    </mirror>' \
+  '  </mirrors>' \
+  '</settings>' > /root/.m2/settings.xml
+
 # Cache Maven dependencies
 COPY pom.xml ./
-RUN mvn dependency:go-offline -B
+RUN mvn dependency:resolve -B
 
 # Build application bundle
 COPY src ./src
-RUN mvn clean package -DskipTests
+RUN mvn clean package -DskipTests -B
 
 # Stage 2: Minimal, secure production runtime
 FROM eclipse-temurin:21-jre-jammy
